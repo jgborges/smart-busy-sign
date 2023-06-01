@@ -16,10 +16,10 @@
 
 const char* ssid = STASSID;
 const char* password = STAPSK;
-const char* hostname = "iambusy";
+const char* hostname = "smart-busy-sign";
 const unsigned int port = 88;
-const unsigned short FW_MAJOR = 1;
-const unsigned short FW_MINOR = 0;
+const short FW_MAJOR = 1;
+const short FW_MINOR = 0;
 
 // Create an instance of the web server
 // specify the port to listen on as an argument
@@ -27,7 +27,7 @@ ESP8266WebServer webServer(port);
 
 // Create an instance of the server
 // specify the port to listen on as an argument
-WiFiServer server(80);
+//WiFiServer server(80);
 
 // Allocate the JSON document
 //
@@ -93,14 +93,14 @@ void setup() {
   }
   Serial.println("NetBIOS started");
  
-  // Start the server
-  server.begin();
-  Serial.println(F("Server started"));
-
-  startWebServer();
-
   // Print the IP address
   Serial.println(WiFi.localIP());
+
+  // Start the server
+  //server.begin();
+  //Serial.println(F("Server started"));
+
+  startWebServer();
 }
 
 void startWebServer() {
@@ -112,25 +112,28 @@ void startWebServer() {
 }
 
 void handleStatus() {
+  if (webServer.method() == HTTP_GET) {
+    Serial.println(F("GET Status"));
 
+    DynamicJsonDocument doc(1024);
+    doc["device"] = ARDUINO_BOARD;
+    doc["device_version"]   = ARDUINO_ESP8266_RELEASE;
+    doc["device_id"] = ARDUINO_BOARD_ID;
+
+    String message = "";
+    serializeJsonPretty(doc, message);
+    Serial.println(message);
+
+    webServer.send(200, "application/json", message);
+  } else {
+    Serial.println(F("POST Status"));
+    webServer.send(500, "application/json", "not implemented!");
+  }
 }
 
 void handlePing() {
-  Serial.println(F("Handle not found"));
-  String message = "ping!!\n\n";
-  for (uint8_t i = 0; i < webServer.args(); i++) { 
-    message += " " + webServer.argName(i) + ": " + webServer.arg(i) + "\n"; 
-  }
-  webServer.send(404, "text/plain", message);
-
-  DynamicJsonDocument doc(1024);
-
-  doc["device"] = ARDUINO_BOARD;
-  doc["device_version"]   = ARDUINO_ESP8266_RELEASE;
-  doc["device_id"] = ARDUINO_BOARD_ID;
-
-  serializeJson(doc, Serial);
-  serializeJson(doc, webServer);
+  Serial.println(F("Handle ping"));
+  webServer.send(404, "text/plain", "ping!!\n\n");
 }
 
 void handleNotFound() {
@@ -152,6 +155,7 @@ void handleNotFound() {
 void loop() {
   MDNS.update();
 
+  /*
   // Check if a client has connected
   WiFiClient client = server.accept();
   if (!client) { return; }
@@ -201,6 +205,7 @@ void loop() {
   // when the function returns and 'client' object is destroyed (out-of-scope)
   // flush = ensure written data are received by the other side
   Serial.println(F("Disconnecting from client"));
+  */
 
   webServer.handleClient();
   yield();
