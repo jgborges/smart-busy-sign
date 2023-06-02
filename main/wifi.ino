@@ -1,3 +1,8 @@
+const char* ssid = STASSID;
+const char* password = STAPSK;
+
+const char* hostname = "smart-busy-sign";
+
 void setupWifi() {
     // Connect to WiFi network
   Serial.println();
