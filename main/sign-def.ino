@@ -19,7 +19,7 @@ struct PanelStatus {
    SIGN DEFINITIONS
 */
 
-#define SIGN_MODEL "smart-busy-sign-beta"
+#define SIGN_MODEL "smart-busy-sign_beta"
 #define SIGN_SN 10001
 
 const short RESET = D6;

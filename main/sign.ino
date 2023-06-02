@@ -145,23 +145,25 @@ ushort findPanelSetupPin(String name, String color) {
 
 String getSignStatus() {
   DynamicJsonDocument doc(2000);
+  doc["timestamp"] = millis();
   doc["model"] = SIGN_MODEL;
   doc["serial-number"] = SIGN_SN;
   doc["hw-model"] = ARDUINO_BOARD_ID;
   doc["hw-version"] = ARDUINO_ESP8266_RELEASE;
   doc["server-version"] = String(FW_MAJOR) + "." + String(FW_MINOR);
-  doc["asseble-date"] = "2023-06-01";
+  doc["manufacturing-date"] = "2023-06-01";
  
-  /*JsonArray statusArray = doc.createNestedArray("panels");
+  JsonArray statusArray = doc.createNestedArray("panels");
   int panelCount = sizeof(panelStatus)/sizeof(PanelStatus);
-  for (int p; p < panelCount; p++) {
+  Serial.println("Panel Count: " + String(panelCount));
+  for (int p=0; p < panelCount; p++) {
     DynamicJsonDocument status(500);
     status["name"] = panelStatus[p].name;
     status["state"] = panelStatus[p].state;
     status["color"] = panelStatus[p].color;
     status["intensity"] = panelStatus[p].intensity;
     statusArray.add(status);
-  }*/
+  }
 
   String message = "";
   serializeJsonPretty(doc, message);
