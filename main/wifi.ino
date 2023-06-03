@@ -1,18 +1,27 @@
-const char* ssid = STASSID;
-const char* password = STAPSK;
-
 const char* hostname = "smart-busy-sign";
 
 void setupWifi() {
-    // Connect to WiFi network
+  // Connect to WiFi network
   Serial.println();
   Serial.println();
-  Serial.print(F("Connecting to "));
-  Serial.println(ssid);
-
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
   WiFi.hostname(hostname);
+  if (storage.isWifiSet()) {
+    Serial.println(F("Stored WiFi settings"));
+    const char* ssid = storage.wifi_ssid;
+    const char* password = storage.wifi_pwd;
+    Serial.print(F("Connecting to "));
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+  } else {
+    // set to default debug values
+    Serial.println(F("Default WiFi settings"));
+    const char* ssid = STASSID;
+    const char* password = STAPSK;
+    Serial.print(F("Connecting to "));
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+  }
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -23,18 +32,16 @@ void setupWifi() {
 
   // Set up mDNS responder:
   // - first argument is the domain name, in this example
-  //   the fully-qualified domain name is "esp8266.local"
+  //   the fully-qualified domain name is "<hostname>.local"
   // - second argument is the IP address to advertise
   //   we send our IP address on the WiFi network
-  if (!MDNS.begin("esp8266")) {
+  if (!MDNS.begin(hostname)) {
     Serial.println("Error setting up MDNS responder!");
-    while (1) { delay(1000); }
   }
   Serial.println("mDNS responder started");
 
   if (!NBNS.begin(hostname)) {
     Serial.println("Error setting up NetBIOS!");
-    while (1) { delay(1000); }
   }
   Serial.println("NetBIOS started");
  

@@ -7,6 +7,19 @@
 const short FW_MAJOR = 1;
 const short FW_MINOR = 0;
 
+struct PanelSetup {
+  String name;
+  String color;
+  ushort gpio_pin;
+};
+
+struct PanelStatus {
+  String name;
+  String state;
+  String color;
+  ushort intensity;
+};
+
 void setup() {
   Serial.begin(115200);
 
@@ -26,9 +39,9 @@ void setup() {
 
   // prepare LED
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(D1, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
-  digitalWrite(LED_BUILTIN, LOW);
+
+  setupStorage();
 
   setupWifi();
 
@@ -40,7 +53,6 @@ void setup() {
 
 void loop() {
   MDNS.update();
-
   handleClient();
   yield();
 }

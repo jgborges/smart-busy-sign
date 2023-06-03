@@ -1,21 +1,4 @@
 /*
-   Basic Types
-*/
-
-struct PanelSetup {
-  String name;
-  String color;
-  ushort gpio_pin;
-};
-
-struct PanelStatus {
-  String name;
-  String state;
-  String color;
-  ushort intensity;
-};
-
-/*
    SIGN DEFINITIONS
 */
 
@@ -41,4 +24,7 @@ const PanelStatus SMART_BUSY_SIGN_BETA_DEFAULT_STATUS[] = {
 };
 
 const PanelSetup* panelSetups = SMART_BUSY_SIGN_BETA_PINS;
+const int panelSetupsLen = sizeof(SMART_BUSY_SIGN_BETA_PINS)/sizeof(PanelSetup);
+
 const PanelStatus* panelStatus = SMART_BUSY_SIGN_BETA_DEFAULT_STATUS;
+const int panelStatusLen = sizeof(SMART_BUSY_SIGN_BETA_DEFAULT_STATUS)/sizeof(PanelStatus);

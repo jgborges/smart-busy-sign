@@ -82,8 +82,7 @@
 #define OFF LOW
 
 void setupSign() {
-  int setupCount = sizeof(panelSetups)/sizeof(PanelSetup);
-  for (int i=0; i < setupCount; i++) {
+  for (int i=0; i < panelSetupsLen; i++) {
     ushort pin = panelSetups[i].gpio_pin;
     pinMode(pin, OUTPUT);
     digitalWrite(pin, OFF);
@@ -91,9 +90,16 @@ void setupSign() {
   updateStatus();
 }
 
+bool isOn(String state) {
+  return String("on-solid").equals(state);
+}
+
+bool isOff(String state) {
+  return String("off").equals(state);
+}
+
 void updateStatus() {
-  int panelCount = sizeof(panelStatus)/sizeof(PanelStatus);
-  for (int p; p < panelCount; p++) {
+  for (int p; p < panelStatusLen; p++) {
     String name = panelStatus[p].name;
     String state = panelStatus[p].state;
     String color = panelStatus[p].color;
@@ -116,17 +122,9 @@ void updateStatus() {
       digitalWrite(pin, OFF);
       Serial.print("Updated panel ");
       Serial.print(name);
-      Serial.println(" to OFF state");
+      Serial.println(" to default OFF state");
     }
   }
-}
-
-bool isOn(String state) {
-  return String("on-solid").equals(state);
-}
-
-bool isOff(String state) {
-  return String("off").equals(state);
 }
 
 ushort findPanelSetupPin(String name, String color) {
@@ -152,11 +150,9 @@ String getSignStatus() {
   doc["hw-version"] = ARDUINO_ESP8266_RELEASE;
   doc["server-version"] = String(FW_MAJOR) + "." + String(FW_MINOR);
   doc["manufacturing-date"] = "2023-06-01";
- 
+
   JsonArray statusArray = doc.createNestedArray("panels");
-  int panelCount = sizeof(panelStatus)/sizeof(PanelStatus);
-  Serial.println("Panel Count: " + String(panelCount));
-  for (int p=0; p < panelCount; p++) {
+  for (int p=0; p < panelStatusLen; p++) {
     DynamicJsonDocument status(500);
     status["name"] = panelStatus[p].name;
     status["state"] = panelStatus[p].state;
