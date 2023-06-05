@@ -7,6 +7,15 @@
 const short FW_MAJOR = 1;
 const short FW_MINOR = 0;
 
+enum ParsingError { 
+  SUCCESS, 
+  NO_PANEL_FOUND,
+  JSON_PARSING_ERROR, 
+  JSON_MISSING_PANELS_FIELD, 
+  JSON_MISSING_NAME_FIELD, 
+  JSON_MISSING_STATE_OR_COLOR_FIELD,
+};
+
 struct PanelSetup {
   String name;
   String color;
@@ -18,11 +27,11 @@ struct PanelStatus {
   String state;
   String color;
   ushort intensity;
+  ulong ttl;
 };
 
 void setup() {
   Serial.begin(115200);
-
   Serial.print(F("Firmware Version: "));
   Serial.print(FW_MAJOR);
   Serial.print(F("."));
@@ -42,11 +51,8 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW);
 
   setupStorage();
-
   setupWifi();
-
   setupSign();
-
   setupWebServer();
 
 }

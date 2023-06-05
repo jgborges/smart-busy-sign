@@ -5,10 +5,15 @@
 #define SIGN_MODEL "smart-busy-sign_beta"
 #define SIGN_SN 10001
 
+enum PanelTypes { 
+  Busy, DND, Camera, Microphone, Other, 
+};
+
 const short RESET = D6;
 
 const PanelSetup SMART_BUSY_SIGN_BETA_PINS[] = {
-  { "busy", "white", D1 },
+  { "busy", "white", LED_BUILTIN },
+  //{ "busy", "white", D1 },
   { "busy", "red", D2 },
   { "do-not-disturb", "red", D3 },
   { "camera", "white", D4 },
@@ -24,7 +29,7 @@ const PanelStatus SMART_BUSY_SIGN_BETA_DEFAULT_STATUS[] = {
 };
 
 const PanelSetup* panelSetups = SMART_BUSY_SIGN_BETA_PINS;
-const int panelSetupsLen = sizeof(SMART_BUSY_SIGN_BETA_PINS)/sizeof(PanelSetup);
+const int panelSetupsLen = 5; //sizeof(SMART_BUSY_SIGN_BETA_PINS)/sizeof(PanelSetup);
 
 const PanelStatus* panelStatus = SMART_BUSY_SIGN_BETA_DEFAULT_STATUS;
-const int panelStatusLen = sizeof(SMART_BUSY_SIGN_BETA_DEFAULT_STATUS)/sizeof(PanelStatus);
+const int panelStatusLen = 4; //sizeof(SMART_BUSY_SIGN_BETA_DEFAULT_STATUS)/sizeof(PanelStatus);
