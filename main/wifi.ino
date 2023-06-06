@@ -1,6 +1,11 @@
 const char* hostname = "smart-busy-sign";
 
 void setupWifi() {
+  // prepare LED
+  bool led = true;
+  pinMode(LED_BUILTIN_AUX, OUTPUT);
+  digitalWrite(LED_BUILTIN_AUX, LOW);
+
   // Connect to WiFi network
   Serial.println();
   Serial.println();
@@ -8,8 +13,8 @@ void setupWifi() {
   WiFi.hostname(hostname);
   if (storage.isWifiSet()) {
     Serial.println(F("Stored WiFi settings"));
-    const char* ssid = storage.wifi_ssid;
-    const char* password = storage.wifi_pwd;
+    const char* ssid = storage.wifiSsid;
+    const char* password = storage.wifiPwd;
     Serial.print(F("Connecting to "));
     Serial.println(ssid);
     WiFi.begin(ssid, password);
@@ -26,9 +31,13 @@ void setupWifi() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(F("."));
+    led = !led;
+    digitalWrite(LED_BUILTIN_AUX, led ? LOW : HIGH);
   }
   Serial.println();
   Serial.println(F("WiFi connected"));
+
+  digitalWrite(LED_BUILTIN_AUX, LOW); // keep LED on to indicate successful connection
 
   // Set up mDNS responder:
   // - first argument is the domain name, in this example

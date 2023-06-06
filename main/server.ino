@@ -58,7 +58,7 @@ void handleStatus() {
         break;
       case JSON_MISSING_PANELS_FIELD:
       case JSON_MISSING_NAME_FIELD:
-      case JSON_MISSING_STATE_OR_COLOR_FIELD:
+      case JSON_MISSING_STATE_FIELD:
         webServer.send(400, "application/json", "missing required field");
       default:
         webServer.send(500, "application/json", "unknown exception"); 
@@ -78,10 +78,19 @@ void handleAbout() {
 }
 
 void handleAdminWifi() {
-  Serial.println("Handle /admin/wifi");
-  String message = printRequestArgs();
-  webServer.send(501, "text/plain", message);
-  //webServer.send(501, "text/plain", "not supported\n\n");
+  if (webServer.method() == HTTP_GET) {
+    Serial.println("Handle GET /admin/wifi");
+
+    String message = getWifiStorage();
+    Serial.println("GET Response");
+    Serial.println(message);
+    webServer.send(200, "application/json", message);
+  } else {
+    Serial.println("Handle POST /admin/wifi");
+    String message = printRequestArgs();
+    webServer.send(501, "text/plain", message);
+    //webServer.send(501, "text/plain", "not supported\n\n");
+  }
 }
 
 void handleAdminReset() {

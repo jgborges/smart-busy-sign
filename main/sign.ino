@@ -78,15 +78,18 @@
 
 */
 
-#define ON HIGH
-#define OFF LOW
+#define ON LOW
+#define OFF HIGH
 
 void setupSign() {
+  Serial.print("Enabling all panels...");
   for (int i=0; i < panelSetupsLen; i++) {
-    ushort pin = panelSetups[i].gpio_pin;
+    ushort pin = panelSetups[i].gpio;
     pinMode(pin, OUTPUT);
-    digitalWrite(pin, OFF);
+    digitalWrite(pin, ON);
   }
+  delay(3000); // turn all lights on after turn on
+  Serial.println("done!"); 
   applySignStatus();
 }
 
@@ -99,13 +102,13 @@ bool isOff(String state) {
 }
 
 void applySignStatus() {
-  for (int p; p < panelStatusLen; p++) {
-    String name = panelStatus[p].name;
-    String state = panelStatus[p].state;
-    String color = panelStatus[p].color;
+  for (int i=0; i < panelStatusLen; i++) {
+    String name = panelStatus[i].name;
+    String state = panelStatus[i].state;
+    String color = panelStatus[i].color;
     ushort pin = findPanelSetupPin(name, color);
-    /*if (pin == NO_PANEL_FOUND) {
-      Serial.println("Could not update panel " + name);
+    if (pin == NO_PANEL_FOUND) {
+      Serial.println("Could not find panel " + name);
     } else if (isOn(state)) {
       digitalWrite(pin, ON);
       Serial.println("Updated panel " + name + " to ON state");
@@ -115,7 +118,7 @@ void applySignStatus() {
     } else {
       digitalWrite(pin, OFF);
       Serial.println("Updated panel " + name + " to default OFF state");
-    }*/
+    }
   }
 }
 
@@ -124,10 +127,10 @@ ushort findPanelSetupPin(String name, String color) {
     if (!name.equals(panelSetups[i].name)) {
       continue;
     }
-    if (!color.equals(panelSetups[i].color)) {
+    if (!color.isEmpty() && !color.equals(panelSetups[i].color)) {
       continue;
     }
-    return panelSetups[i].gpio_pin;
+    return panelSetups[i].gpio;
   }
   return (ushort)NO_PANEL_FOUND;
 }
@@ -174,22 +177,24 @@ ParsingError setSignStatus(String statusJson) {
     Serial.println("missing panels field");
     return JSON_MISSING_PANELS_FIELD;
   }
-  JsonArray panels = root["panel"].to<JsonArray>();
+  JsonArray panels = root["panels"].as<JsonArray>();
+  Serial.println("Panels to update: " + String(panels.size()));
   for (JsonObject panel : panels) {
+    Serial.println("Iterating panels to update!");
+    Serial.println(String(panel["name"]));
     if (!panel.containsKey("name") || panel["name"].as<String>().isEmpty()) {
       Serial.println("missing name field");
       return JSON_MISSING_NAME_FIELD;
     }
-    if (!panel.containsKey("state") && !panel.containsKey("color")) {
+    if (!panel.containsKey("state")) {
       Serial.println("missing color or state field");
-      return JSON_MISSING_STATE_OR_COLOR_FIELD;
+      return JSON_MISSING_STATE_FIELD;
     }
     String name = panel["name"];
     String state = panel["state"];
-    String color = panel["color"];
-    String intensity = panel["intensity"];
-    Serial.println("parsed panel: " + name);
-    //setPanelStatus(name, color, state, intensity);
+    String color = panel["color"] | "";
+    String intensity = panel["intensity"] | "";
+    setPanelStatus(name, color, state, intensity);
   }
   applySignStatus();
   return SUCCESS;
@@ -200,11 +205,13 @@ void setPanelStatus(String name, String color, String state, String intensity) {
     if (!name.equals(panelStatus[i].name)) {
       continue;
     }
-    if (!color.equals("*") && !color.equals(panelStatus[i].color)) {
-      continue;
+    if (!color.isEmpty()) {
+      panelStatus[i].color = color;
     }
-    panelStatus[i];
-    break;
+    panelStatus[i].state = state;
+    //panelStatus[i].intensity = intensity;
+    Serial.println("Panel " + name + " new state: " + state);
+    return;
   }
   Serial.println("Did not find panel to set");
 }

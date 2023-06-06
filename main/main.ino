@@ -13,13 +13,13 @@ enum ParsingError {
   JSON_PARSING_ERROR, 
   JSON_MISSING_PANELS_FIELD, 
   JSON_MISSING_NAME_FIELD, 
-  JSON_MISSING_STATE_OR_COLOR_FIELD,
+  JSON_MISSING_STATE_FIELD,
 };
 
 struct PanelSetup {
   String name;
   String color;
-  ushort gpio_pin;
+  ushort gpio;
 };
 
 struct PanelStatus {
@@ -46,15 +46,10 @@ void setup() {
   Serial.print(F("Board version: "));
   Serial.println(ARDUINO_ESP8266_RELEASE);
 
-  // prepare LED
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
+  setupSign();
   setupStorage();
   setupWifi();
-  setupSign();
   setupWebServer();
-
 }
 
 void loop() {

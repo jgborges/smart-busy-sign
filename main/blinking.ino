@@ -8,11 +8,11 @@ struct BlinkState {
 
 BlinkState blinkStates[20]; // ESP8266 has 16 GPIOs
 
-void blinkingOn(ushort gpioPin) {
+void blinkingOn(ushort gpio) {
 
 }
 
-void blinkingOff(ushort gpioPin) {
+void blinkingOff(ushort gpio) {
 
 }
 
