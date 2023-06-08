@@ -81,17 +81,21 @@
 #define ON LOW
 #define OFF HIGH
 
+#define NO_GPIO 255
+
 void setupSign() {
-  setupBlinking();
+  setupGpio();
 
   Serial.print("Enabling all panels...");
   for (int i=0; i < panelSetupsLen; i++) {
-    ushort pin = panelSetups[i].gpio;
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, ON);
+    byte gpio = panelSetups[i].gpio;
+    pinMode(gpio, OUTPUT);
+    digitalWrite(gpio, ON);
   }
   delay(3000); // turn all lights on after turn on
   Serial.println("done!"); 
+
+  // appy default sign status
   applySignStatus();
 }
 
@@ -110,8 +114,8 @@ void applySignStatus() {
     String color = panelStatus[i].color;
     byte intensity = panelStatus[i].intensity;
 
-    ushort gpio = findPanelSetupPin(name, color);
-    if (gpio == NO_PANEL_FOUND) {
+    uint8_t gpio = findPanelSetupPin(name, color);
+    if (gpio == NO_GPIO) {
       Serial.println("Could not find panel " + name);
     } else {
       setLightState(gpio, state, intensity);
@@ -120,7 +124,7 @@ void applySignStatus() {
   }
 }
 
-ushort findPanelSetupPin(String name, String color) {
+byte findPanelSetupPin(String name, String color) {
   for (int i=0; i < panelSetupsLen; i++) {
     if (!name.equals(panelSetups[i].name)) {
       continue;
@@ -130,7 +134,7 @@ ushort findPanelSetupPin(String name, String color) {
     }
     return panelSetups[i].gpio;
   }
-  return (ushort)NO_PANEL_FOUND;
+  return NO_GPIO;
 }
 
 String getSignStatus() {
@@ -159,7 +163,7 @@ String getSignStatus() {
   return message;
 }
 
-ParsingError setSignStatus(String statusJson) {
+ParsingResult setSignStatus(String statusJson) {
   if (statusJson.isEmpty()) {
     return JSON_PARSING_ERROR;
   }
@@ -195,7 +199,7 @@ ParsingError setSignStatus(String statusJson) {
     setPanelStatus(name, color, state, intensity);
   }
   applySignStatus();
-  return SUCCESS;
+  return PARSE_SUCCESS;
 }
 
 void setPanelStatus(String name, String color, String state, String intensity) {

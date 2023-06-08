@@ -1,8 +1,3 @@
-#ifndef AP_SSID
-#define AP_SSID "Smart Busy Sign"
-#define AP_PSK "smartsign"
-#endif
-
 #define FIFTEEN_SECONDS 10000
 
 const char* hostname = "smart-busy-sign";
@@ -13,14 +8,16 @@ void setupWifi() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, ON);
 
+  String macAddr = WiFi.macAddress();
+  Serial.println("Mac Address: " + macAddr);
   bool isConnected = false;
-  if (storage.isWifiSet() && storage.wifiMode == WIFI_STA) {
+  if (storage.wifiMode == WIFI_STA) {
     Serial.println();
     Serial.println(F("Stored WiFi settings - Client mode"));
     isConnected = setupSTA(storage.wifiSsid, storage.wifiPwd);
   }
 
-  if (storage.isWifiSet() && storage.wifiMode == WIFI_STA) {
+  if (storage.wifiMode == WIFI_STA) {
     Serial.println();
     Serial.println(F("Stored WiFi settings - AP mode"));
     setupAP(storage.wifiSsid, storage.wifiPwd);
@@ -30,7 +27,9 @@ void setupWifi() {
   if (!isConnected) {
     Serial.println();
     Serial.println(F("Default WiFi settings - AP mode"));
-    setupAP(AP_SSID, AP_PSK);
+    String ssid = getDefaultSSID();
+    String password = getDefaultPassword();
+    setupAP(ssid, password);
     // Print the AP IP address
     Serial.println(WiFi.softAPIP());
   } else {
@@ -56,8 +55,7 @@ void setupWifi() {
 
 bool setupSTA(const char* ssid, const char* password) {
   // Connect to WiFi network
-  Serial.print(F("Connecting to "));
-  Serial.println(ssid);
+  Serial.print("Connecting to '" + String(ssid) + "'...");
   
   WiFi.mode(WIFI_STA);
   WiFi.hostname(hostname);
@@ -79,24 +77,40 @@ bool setupSTA(const char* ssid, const char* password) {
       digitalWrite(LED_BUILTIN, led ? ON : OFF);
     }
   }
-  Serial.println();
-  Serial.println(F("WiFi connected"));
 
   digitalWrite(LED_BUILTIN, OFF); // keep LED off to indicate successful connection
+  Serial.println(F("connected!"));
   return true;
 }
 
-void setupAP(const char* ssid, const char* password) {
+void setupAP(String ssid, String password) {
   // Create the WiFi network
-  Serial.print(F("Setting AP network "));
-  Serial.println(ssid);
+  Serial.print("Setting AP network '" + String(ssid) + "'...");
   
   WiFi.mode(WIFI_AP);
   WiFi.hostname(hostname);
   WiFi.softAP(ssid, password);
-  
-  Serial.println();
-  Serial.println(F("WiFi connected"));
+  WiFi.onEvent(onWifiClientConnected, WIFI_EVENT_SOFTAPMODE_STACONNECTED);
+
 
   digitalWrite(LED_BUILTIN_AUX, OFF); // keep LED off to indicate successful connection
+  Serial.println(F("connected!"));
+}
+
+void onWifiClientConnected(WiFiEvent_t event) {
+  Serial.println("Client connected!");
+}
+
+String getMacAddress(String separator) {
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = "";
+  for (int i=0; i < WL_MAC_ADDR_LENGTH; i++) {
+    macID += String(mac[i], HEX);
+    if (i < (WL_MAC_ADDR_LENGTH - 1)) {
+      macID += separator;
+    }
+  }
+  macID.toUpperCase();
+  return macID;
 }

@@ -34,7 +34,7 @@ struct BlinkingState {
 GpioState gpioStates[NUM_DIGITAL_PINS]; // ESP8266 has 16 GPIOs
 BlinkingState gpioBlinkingStates[NUM_DIGITAL_PINS]; // ESP8266 has 16 GPIOs
 
-void setupBlinking() {
+void setupGpio() {
   for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
     gpioStates[gpio].state = "off";
     gpioStates[gpio].intensity = 255;
@@ -43,7 +43,7 @@ void setupBlinking() {
   lastBlinkCheck = millis();
 }
 
-void turnLightOn(ushort gpio, byte intensity = 255) {
+void turnLightOn(uint8_t gpio, byte intensity = 255) {
   bool isPWM = intensity > 0 && intensity < 255;
   if (isPWM) {
     analogWrite(gpio, 255-intensity); // we turn LED on by setting LOW to cathode, so the we need the complement of 255 for intensity
@@ -52,11 +52,11 @@ void turnLightOn(ushort gpio, byte intensity = 255) {
   }
 }
 
-void turnLightOff(ushort gpio) {
+void turnLightOff(uint8_t gpio) {
   digitalWrite(gpio, OFF);
 }
 
-void setLightState(ushort gpio, String newState, byte newIntensity = 255) {
+void setLightState(uint8_t gpio, String newState, byte newIntensity = 255) {
   if (gpio >= NUM_DIGITAL_PINS) {
     Serial.println("Invalid gpio pin: " + String(gpio));
     return;

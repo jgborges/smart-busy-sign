@@ -7,8 +7,8 @@
 const short FW_MAJOR = 1;
 const short FW_MINOR = 0;
 
-enum ParsingError { 
-  SUCCESS, 
+enum ParsingResult { 
+  PARSE_SUCCESS, 
   NO_PANEL_FOUND,
   JSON_PARSING_ERROR, 
   JSON_MISSING_PANELS_FIELD, 
@@ -16,10 +16,16 @@ enum ParsingError {
   JSON_MISSING_STATE_FIELD,
 };
 
+enum PostResult { 
+  POST_SUCCESS, 
+  BAD_REQUEST,
+  SERVER_ERROR
+};
+
 struct PanelSetup {
   String name;
   String color;
-  ushort gpio;
+  uint8_t gpio;
 };
 
 struct PanelStatus {
@@ -32,6 +38,9 @@ struct PanelStatus {
 
 void setup() {
   Serial.begin(115200);
+
+  Serial.println();
+  Serial.println();
   Serial.print(F("Firmware Version: "));
   Serial.print(FW_MAJOR);
   Serial.print(F("."));
@@ -57,4 +66,9 @@ void loop() {
   handleClient();
   handleBlinking();
   yield();
+}
+
+void reboot() {
+  Serial.println("Reboot...");
+  ESP.restart();
 }

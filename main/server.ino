@@ -7,11 +7,12 @@ const unsigned int port = 80;
 ESP8266WebServer webServer(port);
 
 void setupWebServer() {
-  webServer.on(F("/"), handleHome);
+  webServer.on(F("/"), HTTP_GET, handleHome);
   webServer.on(F("/status"), handleStatus);
-  webServer.on(F("/about"), handleAbout);
+  webServer.on(F("/about"), HTTP_GET, handleAbout);
   webServer.on(F("/admin/wifi"), handleAdminWifi);
-  webServer.on(F("/admin/factory-reset"), handleAdminReset);
+  webServer.on(F("/admin/reboot"), HTTP_POST, handleAdminReboot);
+  webServer.on(F("/admin/factory-reset"), HTTP_POST, handleAdminReset);
   webServer.on(F("/admin/sign-info"), handleAdminInfo);
   webServer.onNotFound(handleNotFound);
   webServer.begin();
@@ -48,9 +49,9 @@ void handleStatus() {
     
     String body = webServer.arg("plain");
     Serial.println("Request body: " + body);
-    ParsingError err = setSignStatus(body);
+    ParsingResult err = setSignStatus(body);
     switch (err) {
-      case SUCCESS: 
+      case PARSE_SUCCESS: 
         webServer.send(200, "application/json", "successfully updated sign panels");
         break;
       case JSON_PARSING_ERROR:
@@ -88,9 +89,37 @@ void handleAdminWifi() {
   } else {
     Serial.println("Handle POST /admin/wifi");
     String message = printRequestArgs();
-    webServer.send(501, "text/plain", message);
-    //webServer.send(501, "text/plain", "not supported\n\n");
+    if (!webServer.hasArg("mode") || !webServer.hasArg("ssid") || !webServer.hasArg("password")) {
+      webServer.send(400, "application/json", "missing required field");
+      return;
+    }
+    
+    String mode = webServer.arg("mode");
+    String ssid = webServer.arg("ssid");
+    String password = webServer.arg("password");
+    
+    PostResult result = setWifiStorage(mode, ssid, password);
+    
+    switch (result) {
+      case POST_SUCCESS:
+        webServer.send(200, "text/plain", "wifi settings update. rebooting...");
+        reboot();
+        break;
+      case BAD_REQUEST:
+        webServer.send(400, "text/plain", "bad request");
+        break;
+      case SERVER_ERROR:
+      default:
+        webServer.send(500, "text/plain", "unknown server error");
+        break;
+    }
   }
+}
+
+void handleAdminReboot() {
+  Serial.println("Handle /admin/reboot");
+  webServer.send(501, "text/plain", "rebooting device...\n\n");
+  reboot();
 }
 
 void handleAdminReset() {
