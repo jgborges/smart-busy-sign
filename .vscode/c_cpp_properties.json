@@ -19,7 +19,7 @@
             "includePath": [
                 "/Users/jonas.borges/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2/tools/sdk/include",
                 "/Users/jonas.borges/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2/tools/sdk/lwip2/include",
-                "/Users/jonas.borges/Documents/experiments/ArduinoOutput/core",
+                "/Users/jonas.borges/Documents/experiments/smart-busy-sign/bin/core",
                 "/Users/jonas.borges/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2/cores/esp8266",
                 "/Users/jonas.borges/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2/variants/nodemcu",
                 "/Users/jonas.borges/Library/Arduino15/packages/esp8266/hardware/esp8266/3.1.2/libraries/ESP8266WiFi/src",

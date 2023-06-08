@@ -26,7 +26,7 @@ struct PanelStatus {
   String name;
   String state;
   String color;
-  ushort intensity;
+  byte intensity;
   ulong ttl;
 };
 
@@ -55,5 +55,6 @@ void setup() {
 void loop() {
   MDNS.update();
   handleClient();
+  handleBlinking();
   yield();
 }

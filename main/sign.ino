@@ -82,6 +82,8 @@
 #define OFF HIGH
 
 void setupSign() {
+  setupBlinking();
+
   Serial.print("Enabling all panels...");
   for (int i=0; i < panelSetupsLen; i++) {
     ushort pin = panelSetups[i].gpio;
@@ -106,18 +108,14 @@ void applySignStatus() {
     String name = panelStatus[i].name;
     String state = panelStatus[i].state;
     String color = panelStatus[i].color;
-    ushort pin = findPanelSetupPin(name, color);
-    if (pin == NO_PANEL_FOUND) {
+    byte intensity = panelStatus[i].intensity;
+
+    ushort gpio = findPanelSetupPin(name, color);
+    if (gpio == NO_PANEL_FOUND) {
       Serial.println("Could not find panel " + name);
-    } else if (isOn(state)) {
-      digitalWrite(pin, ON);
-      Serial.println("Updated panel " + name + " to ON state");
-    } else if (isOff(state)) {
-      digitalWrite(pin, OFF);
-      Serial.println("Updated panel " + name + " to OFF state");
     } else {
-      digitalWrite(pin, OFF);
-      Serial.println("Updated panel " + name + " to default OFF state");
+      setLightState(gpio, state, intensity);
+      Serial.println("Updated panel " + name + " to '" + state + "' state");
     }
   }
 }
@@ -208,11 +206,21 @@ void setPanelStatus(String name, String color, String state, String intensity) {
     if (!color.isEmpty()) {
       panelStatus[i].color = color;
     }
+    if (!intensity.isEmpty()) {
+      panelStatus[i].intensity = getIntensityByte(intensity);
+    }
     panelStatus[i].state = state;
-    //panelStatus[i].intensity = intensity;
     Serial.println("Panel " + name + " new state: " + state);
     return;
   }
   Serial.println("Did not find panel to set");
 }
 
+byte getIntensityByte(String value) {
+  int intValue = value.toInt();
+  if (intValue > 0 && intValue < 255) {
+    return (byte)intValue;
+  } else {
+    return 255;
+  }
+}

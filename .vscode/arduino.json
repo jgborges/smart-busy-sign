@@ -3,5 +3,5 @@
     "board": "esp8266:esp8266:nodemcuv2",
     "sketch": "main/main.ino",
     "port": "/dev/tty.usbserial-14220",
-    "output": "../ArduinoOutput"
+    "output": "./bin"
 }

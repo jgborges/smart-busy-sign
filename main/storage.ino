@@ -2,8 +2,6 @@
 
 #define EEPROM_SET 42 // magig number to differentiate random bits from actual values written in EEPROM
 
-enum WifiMode { AP, CLIENT };
-
 struct Storage {
   // permanent sign information
   byte setValue;
@@ -13,7 +11,7 @@ struct Storage {
 
   // wifi connection information
   byte wifiSetValue;
-  WifiMode wifiMode;
+  WiFiMode_t wifiMode;
   char wifiSsid[33]; // ssd can be 32 char at most
   char wifiPwd[63];  // password can be 62 char at most
 
@@ -39,23 +37,29 @@ void setupStorage() {
   } else {
     // load default values
     storage.setValue = 0;
-    strncpy(storage.signModel, "test 1", sizeof(storage.signModel));
+    strncpy(storage.signModel, "smart-busy-sign-v1", sizeof(storage.signModel));
+    strncpy(storage.serialNumber, "0000000001", sizeof(storage.serialNumber));
+    strncpy(storage.manufacturingDate, "2023-06-01", sizeof(storage.manufacturingDate));
 
     storage.wifiSetValue = 0;
-    storage.wifiMode = AP;
-    strncpy(storage.wifiSsid, "Smart Busy Sign", sizeof(storage.wifiSsid));
-    strncpy(storage.wifiPwd, "abc123456", sizeof(storage.wifiPwd));
+    storage.wifiMode = WIFI_AP;
+    memset(storage.wifiSsid, 0, sizeof storage.wifiSsid);
+    memset(storage.wifiPwd, 0, sizeof storage.wifiPwd);
     
     //0, SIGN_MODEL, SIGN_SN, "2023-06-01",
   }
 }
 
 String getWifiStorage() {
-  String mode = storage.wifiMode == AP ? "AP" : "Client";
+  String mode = storage.wifiMode == WIFI_AP ? "AP" : "Client";
   String msg = "{ ";
   msg += "\"mode\": \"" + mode + "\",";
   msg += "\"ssid\": \"" + String(storage.wifiSsid) + "\", ";
   msg += "\"password\": \"" + String(storage.wifiPwd) + "\" ";
   msg += "}";
   return msg;
+}
+
+void setWifiStorage(const WiFiMode_t mode, String ssid, String password) {
+   
 }
