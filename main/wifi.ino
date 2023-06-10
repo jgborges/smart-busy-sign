@@ -11,25 +11,22 @@ void setupWifi() {
   String macAddr = WiFi.macAddress();
   Serial.println("Mac Address: " + macAddr);
   bool isConnected = false;
-  if (storage.wifiMode == WIFI_STA) {
-    Serial.println();
-    Serial.println(F("Stored WiFi settings - Client mode"));
-    isConnected = setupSTA(storage.wifiSsid, storage.wifiPwd);
+  if (wifiConfig.mode == WIFI_STA) {
+    isConnected = setupSTA(wifiConfig.ssid, wifiConfig.psk);
   }
 
-  if (storage.wifiMode == WIFI_STA) {
-    Serial.println();
-    Serial.println(F("Stored WiFi settings - AP mode"));
-    setupAP(storage.wifiSsid, storage.wifiPwd);
+  if (wifiConfig.mode == WIFI_AP) {
+    setupAP(wifiConfig.ssid, wifiConfig.psk);
     isConnected = true;
   }
 
   if (!isConnected) {
     Serial.println();
-    Serial.println(F("Default WiFi settings - AP mode"));
+    Serial.println(F("Initializing with default settings..."));
     String ssid = getDefaultSSID();
     String password = getDefaultPassword();
     setupAP(ssid, password);
+    staConnectionFailed = true; // remember so we can inform the user
     // Print the AP IP address
     Serial.println(WiFi.softAPIP());
   } else {
@@ -55,7 +52,7 @@ void setupWifi() {
 
 bool setupSTA(const char* ssid, const char* password) {
   // Connect to WiFi network
-  Serial.print("Connecting to '" + String(ssid) + "'...");
+  Serial.print("Connecting to '" + String(ssid) + " (STA)'...");
   
   WiFi.mode(WIFI_STA);
   WiFi.hostname(hostname);
@@ -66,15 +63,15 @@ bool setupSTA(const char* ssid, const char* password) {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     ulong elapsed = millis() - start;
-    if (elapsed > FIFTEEN_SECONDS) {
-      Serial.println();
-      Serial.println(F("Could not connect to Wifi"));
-      return false;
-    } else {
+    if (elapsed < FIFTEEN_SECONDS) {
       // blink LED to indicate activity
       Serial.print(F("."));
       led = !led;
       digitalWrite(LED_BUILTIN, led ? ON : OFF);
+    } else {
+      Serial.println();
+      Serial.println(F("Could not connect to Wifi"));
+      return false;
     }
   }
 

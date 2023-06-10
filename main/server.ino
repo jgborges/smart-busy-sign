@@ -82,12 +82,13 @@ void handleAdminWifi() {
   if (webServer.method() == HTTP_GET) {
     Serial.println("Handle GET /admin/wifi");
 
-    String message = getWifiStorage();
+    String message = getWifiConfig();
     Serial.println("GET Response");
     Serial.println(message);
     webServer.send(200, "application/json", message);
   } else {
     Serial.println("Handle POST /admin/wifi");
+    /*
     String message = printRequestArgs();
     if (!webServer.hasArg("mode") || !webServer.hasArg("ssid") || !webServer.hasArg("password")) {
       webServer.send(400, "application/json", "missing required field");
@@ -97,12 +98,22 @@ void handleAdminWifi() {
     String mode = webServer.arg("mode");
     String ssid = webServer.arg("ssid");
     String password = webServer.arg("password");
-    
-    PostResult result = setWifiStorage(mode, ssid, password);
-    
+    PostResult result = setWifiConfig(mode, ssid, password);
+    /**/
+
+    if (!webServer.hasArg("plain")) {
+      webServer.send(400, "application/json", "no body");
+      return;
+    }
+    String body = webServer.arg("plain");
+    Serial.println("Request body: " + body);
+
+    PostResult result = setWifiConfig(body);
+
     switch (result) {
       case POST_SUCCESS:
-        webServer.send(200, "text/plain", "wifi settings update. rebooting...");
+        webServer.send(200, "text/html", "Wifi config updated successfully! Device will reboot now...");
+        delay(5000);
         reboot();
         break;
       case BAD_REQUEST:
@@ -118,13 +129,17 @@ void handleAdminWifi() {
 
 void handleAdminReboot() {
   Serial.println("Handle /admin/reboot");
-  webServer.send(501, "text/plain", "rebooting device...\n\n");
+  webServer.send(200, "text/plain", "rebooting device...\n\n");
+  delay(2000);
   reboot();
 }
 
 void handleAdminReset() {
   Serial.println("Handle /admin/factory-reset");
-  webServer.send(501, "text/plain", "not supported\n\n");
+  factoryReset(false);
+  webServer.send(200, "text/plain", "Successfuly reset to factory default! Device will reboot now...\n\n");
+  delay(2000);
+  reboot();
 }
 
 void handleAdminInfo() {

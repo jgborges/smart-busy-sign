@@ -36,6 +36,8 @@ struct PanelStatus {
   ulong ttl;
 };
 
+bool staConnectionFailed = false;
+
 void setup() {
   Serial.begin(115200);
 
@@ -70,5 +72,6 @@ void loop() {
 
 void reboot() {
   Serial.println("Reboot...");
+  yield();
   ESP.restart();
 }
