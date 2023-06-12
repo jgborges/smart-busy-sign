@@ -1,43 +1,6 @@
 /*
   A sign is defined by a list of panels, which are defined by a light color (red, white, blue, etc), 
-  state (on, off), pattern (blinking), and intensty (0 - 100%).
-
-  Each sign is defined by the following structure:
-
-  {
-    "model": "smart-sign-1",
-    "serial_number": "123456789",
-    "hw-model": "ESP8266 NodeMCU",
-    "hw-version": "3.1.2",
-    "server-version": "1.0",
-    "assemble-date": "2023-06-01",
-    "panels": [
-      {
-        "name": "busy",
-        "colors": ["white"],
-        "intensities": [10, 50, 100],
-        "states": ["off", "on-solid"],
-      },
-      {
-        "name": "do-not-disturb",
-        "colors": ["red"],
-        "intensities": [100],
-        "states": ["off", "on-solid", "on-blinking", "on-blinking-fast"],
-      },
-      {
-        "name": "camera",
-        "colors": ["yellow"],
-        "intensities": [100],
-        "states": ["off", "on-solid", "on-blinking", "on-blinking-fast"],
-      },
-      {
-        "name": "microphone",
-        "colors": ["yellow"],
-        "intensities": [100],
-        "states": ["off", "on-solid", "on-blinking", "on-blinking-fast"],
-      }
-    ]
-  }
+  state (on, off), pattern (blinking), and intensty (0 - 255).
 
   The current state of the sign, called status, can be defined by the following structure
 
@@ -58,19 +21,19 @@
       {
         "name": "do-not-disturb",
         "color": "red",
-        "intensity": 100,
+        "intensity": 255,
         "state": "on-solid",
       },
       {
         "name": "camera",
         "color": "yellow",
-        "intensity": 100,
+        "intensity": 255,
         "state": "on-blinking",
       },
       {
         "name": "microphone",
         "color": "yellow",
-        "intensity": 100,
+        "intensity": 255,
         "state": "off",
       }
     ]

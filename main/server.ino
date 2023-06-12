@@ -1,4 +1,6 @@
 #include "index.html.h"  // indexHtml
+#include "resources/images.h"
+#include <uri/UriBraces.h>
 
 const unsigned int port = 80;
 
@@ -8,12 +10,12 @@ ESP8266WebServer webServer(port);
 
 void setupWebServer() {
   webServer.on(F("/"), HTTP_GET, handleHome);
+  webServer.on(UriBraces("/resources/{}"), HTTP_GET, handleResources);
   webServer.on(F("/status"), handleStatus);
-  webServer.on(F("/about"), HTTP_GET, handleAbout);
+  webServer.on(F("/admin/device"), handleAdminDevice);
   webServer.on(F("/admin/wifi"), handleAdminWifi);
   webServer.on(F("/admin/reboot"), HTTP_POST, handleAdminReboot);
   webServer.on(F("/admin/factory-reset"), HTTP_POST, handleAdminReset);
-  webServer.on(F("/admin/sign-info"), handleAdminInfo);
   webServer.onNotFound(handleNotFound);
   webServer.begin();
   Serial.println("HTTP web server started");
@@ -27,6 +29,21 @@ void handleHome() {
   if (webServer.method() == HTTP_GET) {
     Serial.println("Handle GET /");
     webServer.send(200, "text/html", indexHtml);
+  }
+}
+
+void handleResources() {
+  if (webServer.method() == HTTP_GET) {
+    Serial.println("Handle GET /resources");
+    String resourceId = webServer.pathArg(0);
+    Serial.println("Resouce id: " + resourceId);
+    long resourceSize;
+    const unsigned char* resource = getImageResourceFromId(resourceId, resourceSize);
+    if (resource != NULL) {
+      webServer.send(200, "image/png", resource, resourceSize);
+    } else {
+      webServer.send(404, "text/plain", "resource not found!");
+    }
   }
 }
 
@@ -78,29 +95,27 @@ void handleAbout() {
   }
 }
 
+void handleAdminDevice() {
+  if (webServer.method() == HTTP_GET) {
+    Serial.println("Handle GET /admin/device");
+    String message = getDeviceInformation();
+    Serial.println("GET Response");
+    Serial.println(message);
+    webServer.send(200, "application/json", message);
+  } else {
+    webServer.send(501, "text/plain", "not supported\n\n");
+  }
+}
+
 void handleAdminWifi() {
   if (webServer.method() == HTTP_GET) {
     Serial.println("Handle GET /admin/wifi");
-
     String message = getWifiConfig();
     Serial.println("GET Response");
     Serial.println(message);
     webServer.send(200, "application/json", message);
   } else {
     Serial.println("Handle POST /admin/wifi");
-    /*
-    String message = printRequestArgs();
-    if (!webServer.hasArg("mode") || !webServer.hasArg("ssid") || !webServer.hasArg("password")) {
-      webServer.send(400, "application/json", "missing required field");
-      return;
-    }
-    
-    String mode = webServer.arg("mode");
-    String ssid = webServer.arg("ssid");
-    String password = webServer.arg("password");
-    PostResult result = setWifiConfig(mode, ssid, password);
-    /**/
-
     if (!webServer.hasArg("plain")) {
       webServer.send(400, "application/json", "no body");
       return;
@@ -140,11 +155,6 @@ void handleAdminReset() {
   webServer.send(200, "text/plain", "Successfuly reset to factory default! Device will reboot now...\n\n");
   delay(2000);
   reboot();
-}
-
-void handleAdminInfo() {
-  Serial.println("Handle /admin/sign-info");
-  webServer.send(501, "text/plain", "not supported\n\n");
 }
 
 void handleNotFound() {

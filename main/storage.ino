@@ -52,11 +52,11 @@ WifiConfig wifiConfig = {};
 #define WIFI_CONFIG_POS 1*STORAGE_BLOCK
 
 void setupStorage() {
-  readDeviceInformation();
-  readWifiConfig();
+  loadDeviceInformation();
+  loadWifiConfig();
 }
 
-void readDeviceInformation() {
+void loadDeviceInformation() {
   Serial.print("Reading device information from EEPROM...");
   EEPROM.begin(STORAGE_SIZE);
   EEPROM.get(DEVICE_INFO_POS, devInfo);
@@ -80,7 +80,18 @@ void readDeviceInformation() {
 void setDeviceInformation() {
 }
 
-void readWifiConfig() {
+String getDeviceInformation() {
+  String msg = "{ ";
+  msg += "\"signModel\": \"" + String(devInfo.signModel) + "\",";
+  msg += "\"boardModel\": \"" + String(ARDUINO_BOARD) + "\",";
+  msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\",";
+  msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\", ";
+  msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\" ";
+  msg += "}";
+  return msg;
+}
+
+void loadWifiConfig() {
   Serial.print("Reading Wifi config from EEPROM...");
   EEPROM.begin(STORAGE_SIZE);
   EEPROM.get(WIFI_CONFIG_POS, wifiConfig);

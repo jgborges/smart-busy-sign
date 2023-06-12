@@ -8,10 +8,9 @@ const char *indexHtml = R"====(
   </head>
   <body onload="load()">
     <h1>Sign Status</h1>
-    <input type="button" value="Refresh" onclick="loadStatus()" />
-    <table id="statusTable">
+    <table id="statusTable" cellpadding="2px" border="1px">
       <thead><tr>
-        <td>Panel Name</td>
+        <td colspan="2">Panel Name</td>
         <td>Color</td>
         <td>Status</td>
         <td>Light Itensity</td>
@@ -19,20 +18,32 @@ const char *indexHtml = R"====(
       <tbody>
       </tbody>
     </table>
-    <ul id="status"></ul>
+    <input type="button" value="Refresh" onclick="loadStatus()" />
+    <h1>Device Information</h1>
+    <form>
+      <label for="signModel">Sign Model</label><br>
+      <input type="text" id="signModel" name="signModel" value="" readonly><br>
+      <label for="boardModel">Board Model</label><br>
+      <input type="text" id="boardModel" name="boardModel" value="" readonly><br>
+      <label for="firmwareVersion">Firmware Version</label><br>
+      <input type="text" id="firmwareVersion" name="firmwareVersion" value="" readonly><br>
+      <label for="serialNumber">Serial Number</label><br>
+      <input type="text" id="serialNumber" name="serialNumber" value="" readonly><br>
+      <label for="manufacturingDate">Manufacturing Date</label><br>
+      <input type="text" id="manufacturingDate" name="manufacturingDate" value="" readonly><br>
+    </form>
     <h1>WiFi Configuration</h1>
     <h4><span id="wifi-warn" style="background-color: yellow;"></span></h4>
-    <form id="wifi" onsubmit="updateWifi()">
+    <form id="wifi">
       <label>WiFi Mode:</label><br>
       <input type="radio" id="sta" name="mode" value="sta"> <label for="sta">WiFi Client (recommended)</label><br>
       <input type="radio" id="ap" name="mode" value="ap"> <label for="ap">Access Point</label><br>
-
       <label for="css">Network Name (SSID)</label><br>
       <input type="text" id="ssid" name="ssid" value="" maxlength="32"><br>
       <label for="password">WiFi Key (Password)</label><br>
       <input type="password" id="password" name="password" value="" maxlength="64"><br>
       <input type="submit" name="action" value="Submit"><br>
-      <span style="font-size: x-small; font-style: italic;">* Device will reboot after WiFi configuration changes. If client mode fails to connect, it will start again in Access Point (AP) mode (default settings)</span>
+      <span style="font-size:small; font-style:italic;">* Device will reboot after WiFi configuration changes. If client mode fails to connect, it will start again in Access Point (AP) mode (default settings)</span>
     </form>
     <h1>Tools</h1>
     <form>
@@ -42,7 +53,10 @@ const char *indexHtml = R"====(
   <script>
     function load() {
       loadStatus();
-      loadWifiSettings();
+      loadDeviceInfo();
+      loadWifiConfig();
+
+      document.querySelector("#wifi").addEventListener("submit", updateWifi);
     }
 
     async function loadStatus() {
@@ -56,23 +70,37 @@ const char *indexHtml = R"====(
 
       const data = await response.json(); // read response body as json
 
-      const statusDiv = document.querySelector("#status");
       const tbody = document.querySelector("#statusTable > tbody");
-      statusDiv.innerHTML = ""; // clear
       tbody.innerHTML = ""; // clear
       (data || []).panels.forEach(p => {
-        const li = document.createElement('li');
-        li.textContent = `Panel ${p.name}: color=${p.color}, state=${p.state}, intensity=${p.intensity}`;
-        statusDiv.appendChild(li);
-
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${p.name}</td><td>${p.color}</td><td>${p.state}</td><td>${p.intensity}</td>`;
+        tr.innerHTML = `<td><img src="/resources/${p.name}.png" height="32"/></td><td>${p.name}</td><td>${p.color}</td><td>${p.state}</td><td>${p.intensity}</td>`;
         tbody.appendChild(tr);
       });
       console.info("Sign status loaded!");
     }
 
-    async function loadWifiSettings() {
+    async function loadDeviceInfo() {
+      console.info("Fetching Device Information...");
+      const response = await fetch('/admin/device', {
+        method: 'GET',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json(); // read response body as json
+
+      document.getElementById('signModel').value = data.signModel;
+      document.getElementById('boardModel').value = data.boardModel;
+      document.getElementById('firmwareVersion').value = data.firmwareVersion;
+      document.getElementById('serialNumber').value = data.serialNumber;
+      document.getElementById('manufacturingDate').value = data.manufacturingDate;
+
+      console.info("Device Information loaded!");
+    }
+
+    async function loadWifiConfig() {
       console.info("Fetching Wifi Settings...");
       const response = await fetch('/admin/wifi', {
         method: 'GET',
@@ -110,7 +138,7 @@ const char *indexHtml = R"====(
 
       const response = await post('/admin/wifi', { mode, ssid, password });
 
-      if (response.result == 200) {
+      if (response.ok) {
         document.getElementById("wifi-warn").textContent = "Successfully updated WiFi settings! Device will reboot";
       } else {
         document.getElementById("wifi-warn").textContent = "Failed to update WiFi settings!";
@@ -129,15 +157,16 @@ const char *indexHtml = R"====(
       });
     }
 
-    async function reboot(e) {
-      e.preventDefault();
+    async function reboot() {
       console.info("Rebooting device...");
       const response = await post('/admin/reboot');
       console.info(response);
     }
 
-    async function factoryReset(e) {
-      e.preventDefault();
+    async function factoryReset() {
+      if (!confirm("Factory reset will erase all your configurations, including WiFi!\n\nAre you sure you want to continue?")) {
+        return;
+      }
       console.info("Setting device to original factory settings...");
       const response = await post('/admin/factory-reset');
       console.info(response);
