@@ -304,3 +304,7 @@ void loadSettings() {
   Serial.print("h, end=" + String(settings.autoSleepHourEnd));
   Serial.println("h");
 }
+
+int getTzOffsetInSecods() {
+  return settings.tzOffsetInMinutes * 60; // in seconds
+}

@@ -47,7 +47,7 @@
 #define NO_GPIO 255
 
 void setupSign() {
-  setupGpio();
+  setupGpio(); // set all to disabled
 
   Serial.print("Enabling all panels...");
   for (int i=0; i < panelSetupsLen; i++) {
@@ -56,34 +56,69 @@ void setupSign() {
     digitalWrite(gpio, ON);
   }
   delay(3000); // turn all lights on after turn on
+  for (int i=0; i < panelSetupsLen; i++) {
+    byte gpio = panelSetups[i].gpio;
+    pinMode(gpio, OUTPUT);
+    digitalWrite(gpio, OFF);
+  }
   Serial.println("done!"); 
 
   // appy default sign status
-  applySignStatus();
+  applySignStatus(); // turn all of as gpios are initiated in DISABLED state
 }
 
-bool isOn(String state) {
-  return String("on-solid").equals(state);
+String panelStateToString(PanelState state) {
+  switch (state) {
+    default:
+    case PANEL_DISABLED:
+      return "disabled";
+    case PANEL_OFF:
+      return "off";
+    case PANEL_ON:
+      return "on-solid";
+    case PANEL_BLINKING:
+      return "on-blinking";
+    case PANEL_BLINKING_FAST:
+      return "on-blinking-fast";
+    case PANEL_BLINKING_SLOW:
+      return "on-blinking-slow";
+  }
 }
 
-bool isOff(String state) {
-  return String("off").equals(state);
+PanelState parsePanelState(String state) {
+  if (state.equals("off")) {
+    return PANEL_OFF;
+  } else if (state.equals("on-solid")) {
+    return PANEL_ON;
+  } else if (state.equals("on-blinking")) {
+    return PANEL_BLINKING;
+  } else if (state.equals("on-blinking-fast")) {
+    return PANEL_BLINKING_FAST;
+  } else if (state.equals("on-blinking-slow")) {
+    return PANEL_BLINKING_SLOW;
+  } else {
+    return PANEL_DISABLED;
+  }
 }
 
 void applySignStatus() {
   for (int i=0; i < panelStatusLen; i++) {
-    String name = panelStatus[i].name;
-    String state = panelStatus[i].state;
-    String color = panelStatus[i].color;
-    byte intensity = panelStatus[i].intensity;
+    applySignStatus(panelStatus[i]);
+  }
+}
 
-    uint8_t gpio = findPanelSetupPin(name, color);
-    if (gpio == NO_GPIO) {
-      Serial.println("Could not find panel " + name);
-    } else {
-      setLightState(gpio, state, intensity);
-      Serial.println("Updated panel " + name + " to '" + state + "' state");
-    }
+void applySignStatus(PanelStatus panel) {
+  String name = panel.name;
+  String color = panel.color;
+  PanelState state = panel.state;
+  byte intensity = panel.intensity;
+
+  uint8_t gpio = findPanelSetupPin(name, color);
+  if (gpio != NO_GPIO) {
+    Serial.println("Updating panel " + name + " to '" + panelStateToString(state) + "' state");
+    setLightState(gpio, state, intensity);
+  } else {
+    Serial.println("Could not find gpio for panel " + name);
   }
 }
 
@@ -114,7 +149,7 @@ String getSignStatus() {
   for (int p=0; p < panelStatusLen; p++) {
     DynamicJsonDocument status(300);
     status["name"] = panelStatus[p].name;
-    status["state"] = panelStatus[p].state;
+    status["state"] = panelStateToString(panelStatus[p].state);
     status["color"] = panelStatus[p].color;
     status["intensity"] = panelStatus[p].intensity;
     status["ttl"] = panelStatus[p].ttl;
@@ -161,26 +196,26 @@ ParsingResult setSignStatus(String statusJson) {
     String intensity = panel["intensity"] | "";
     setPanelStatus(name, color, state, intensity);
   }
-  applySignStatus();
   return PARSE_SUCCESS;
 }
 
 void setPanelStatus(String name, String color, String state, String intensity) {
   for (int i=0; i < panelStatusLen; i++) {
-    if (!name.equals(panelStatus[i].name)) {
+    PanelStatus& panel = panelStatus[i];
+    if (!name.equals(panel.name)) {
       continue;
     }
     if (!color.isEmpty()) {
-      panelStatus[i].color = color;
+      panel.color = color;
     }
     if (!intensity.isEmpty()) {
-      panelStatus[i].intensity = getIntensityByte(intensity);
+      panel.intensity = getIntensityByte(intensity);
     }
-    panelStatus[i].state = state;
-    Serial.println("Panel " + name + " new state: " + state);
+    panel.state = parsePanelState(state);
+    applySignStatus(panel);
     return;
   }
-  Serial.println("Did not find panel to set");
+  Serial.println("Panel does not exists! " + name + " | " + color);
 }
 
 byte getIntensityByte(String value) {

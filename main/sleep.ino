@@ -6,10 +6,11 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
 
 void setupTime() {
-    int offset = settings.tzOffsetInMinutes * 60; // in seconds
+    const int offset = getTzOffsetInSecods();
+    const int updateInterval = 3600000; // 1h
     timeClient.begin();
     timeClient.setTimeOffset(offset);
-    timeClient.setUpdateInterval(3600000); // 1h
+    timeClient.setUpdateInterval(updateInterval);
 }
 
 ulong getEpochTime() {

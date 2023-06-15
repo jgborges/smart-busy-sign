@@ -22,15 +22,26 @@ enum PostResult {
   SERVER_ERROR
 };
 
+enum BlinkingType { BLINKING_NORMAL, BLINKING_FAST, BLINKING_SLOW, BLINKING_OFF };
+
 struct PanelSetup {
   String name;
   String color;
   uint8_t gpio;
 };
 
+enum PanelState {
+  PANEL_DISABLED,
+  PANEL_OFF,
+  PANEL_ON,
+  PANEL_BLINKING,
+  PANEL_BLINKING_FAST,
+  PANEL_BLINKING_SLOW
+};
+
 struct PanelStatus {
   String name;
-  String state;
+  PanelState state;
   String color;
   byte intensity;
   ulong ttl;
