@@ -102,7 +102,7 @@ byte findPanelSetupPin(String name, String color) {
 
 String getSignStatus() {
   DynamicJsonDocument doc(2000);
-  doc["timestamp"] = millis();
+  doc["timestamp"] = getEpochTime();
   doc["model"] = SIGN_MODEL;
   doc["serial-number"] = SIGN_SN;
   doc["hw-model"] = ARDUINO_BOARD;

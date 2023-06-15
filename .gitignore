@@ -1,3 +1,4 @@
+.DS_Store
 **/secrets.ino
 bin/
 bin/**

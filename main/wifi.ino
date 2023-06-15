@@ -24,8 +24,8 @@ void setupWifi() {
     Serial.println();
     Serial.println(F("Initializing with default settings..."));
     String ssid = getDefaultSSID();
-    String password = getDefaultPassword();
-    setupAP(ssid, password);
+    String psk = getDefaultPsk();
+    setupAP(ssid, psk);
     staConnectionFailed = true; // remember so we can inform the user
     // Print the AP IP address
     Serial.println(WiFi.softAPIP());
@@ -50,13 +50,13 @@ void setupWifi() {
   Serial.println(F("NetBIOS started"));
 }
 
-bool setupSTA(const char* ssid, const char* password) {
+bool setupSTA(const char* ssid, const char* psk) {
   // Connect to WiFi network
   Serial.print("Connecting to '" + String(ssid) + " (STA)'...");
   
   WiFi.mode(WIFI_STA);
   WiFi.hostname(hostname);
-  WiFi.begin(ssid, password);
+  WiFi.begin(ssid, psk);
 
   bool led = true;
   ulong start = millis();
@@ -80,13 +80,13 @@ bool setupSTA(const char* ssid, const char* password) {
   return true;
 }
 
-void setupAP(String ssid, String password) {
+void setupAP(String ssid, String psk) {
   // Create the WiFi network
   Serial.print("Setting AP network '" + String(ssid) + "'...");
   
   WiFi.mode(WIFI_AP);
   WiFi.hostname(hostname);
-  WiFi.softAP(ssid, password);
+  WiFi.softAP(ssid, psk);
   WiFi.onEvent(onWifiClientConnected, WIFI_EVENT_SOFTAPMODE_STACONNECTED);
 
 

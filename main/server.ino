@@ -40,6 +40,7 @@ void handleResources() {
     long resourceSize;
     const unsigned char* resource = getImageResourceFromId(resourceId, resourceSize);
     if (resource != NULL) {
+      webServer.sendHeader("Cache-Control", "max-age=84600", false); // 24h suggested cache
       webServer.send(200, "image/png", resource, resourceSize);
     } else {
       webServer.send(404, "text/plain", "resource not found!");
@@ -85,16 +86,6 @@ void handleStatus() {
   }
 }
 
-void handleAbout() {
-  if (webServer.method() == HTTP_GET) {
-    Serial.println("Handle GET /about");
-    webServer.send(200, "text/plain", "under contruction!!\n\n");
-  } else {
-    Serial.println("Method " + HttpMethodToString(webServer.method()) + " /about");
-    webServer.send(405, "text/plain", "Method not allowed");
-  }
-}
-
 void handleAdminDevice() {
   if (webServer.method() == HTTP_GET) {
     Serial.println("Handle GET /admin/device");
@@ -103,7 +94,28 @@ void handleAdminDevice() {
     Serial.println(message);
     webServer.send(200, "application/json", message);
   } else {
-    webServer.send(501, "text/plain", "not supported\n\n");
+    Serial.println("Handle POST /admin/device");
+    if (!webServer.hasArg("plain")) {
+      webServer.send(400, "application/json", "no body");
+      return;
+    }
+    String body = webServer.arg("plain");
+    Serial.println("Request body: " + body);
+
+    PostResult result = setDeviceInformation(body);
+
+    switch (result) {
+      case POST_SUCCESS:
+        webServer.send(200, "text/html", "device information updated successfully!");
+        break;
+      case BAD_REQUEST:
+        webServer.send(400, "text/plain", "bad request");
+        break;
+      case SERVER_ERROR:
+      default:
+        webServer.send(500, "text/plain", "unknown server error");
+        break;
+    }
   }
 }
 

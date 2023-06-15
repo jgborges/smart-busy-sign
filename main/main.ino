@@ -61,10 +61,12 @@ void setup() {
   setupStorage();
   setupWifi();
   setupWebServer();
+  setupTime();
 }
 
 void loop() {
   MDNS.update();
+  handleSleep();
   handleClient();
   handleBlinking();
   yield();

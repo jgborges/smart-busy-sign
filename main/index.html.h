@@ -1,49 +1,103 @@
 const char *indexHtml = R"====(
 <html>
   <head>
+    <link rel="icon" type="image/png" sizes="32x32" href="/resources/favicon-32x32.png"> 
     <title>Smart Busy Sign - Home</title>
-    <!--<style>
-      body { font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }
-    </style>-->
+    <style>
+      body { font-family: Arial, Helvetica, Sans-Serif }
+
+      @keyframes blink {  
+        50% {
+          background-color: white;
+        }
+      }
+      @-webkit-keyframes blink {
+        50% {
+          background-color: white;
+        }
+      }
+      .blinking-fast {
+        -webkit-animation: blink 0.3s linear infinite;
+        -moz-animation: blink 0.3s linear infinite;
+        animation: blink 0.3s step-start 0s infinite;
+      }
+      .blinking {
+        -webkit-animation: blink 1s linear infinite;
+        -moz-animation: blink 1s linear infinite;
+        animation: blink 1s step-start 0s infinite;
+      }
+      .blinking-slow {
+        -webkit-animation: blink 1.5s linear infinite;
+        -moz-animation: blink 1.5s linear infinite;
+        animation: blink 1.5s step-start 0s infinite;
+      }
+    </style>
   </head>
   <body onload="load()">
     <h1>Sign Status</h1>
-    <table id="statusTable" cellpadding="2px" border="1px">
-      <thead><tr>
-        <td colspan="2">Panel Name</td>
+    <table id="statusTable" cellpadding="3px">
+      <thead><tr style="background-color: black; color: white">
+        <td colspan="2">Panel</td>
         <td>Color</td>
         <td>Status</td>
-        <td>Light Itensity</td>
+        <td>Light Intensity</td>
       </tr></thead>
       <tbody>
       </tbody>
     </table>
+    <span style="font-size:small; font-style:italic;">* Light intensity ranges from 0 to 255</span><br>
     <input type="button" value="Refresh" onclick="loadStatus()" />
     <h1>Device Information</h1>
     <form>
-      <label for="signModel">Sign Model</label><br>
-      <input type="text" id="signModel" name="signModel" value="" readonly><br>
-      <label for="boardModel">Board Model</label><br>
-      <input type="text" id="boardModel" name="boardModel" value="" readonly><br>
-      <label for="firmwareVersion">Firmware Version</label><br>
-      <input type="text" id="firmwareVersion" name="firmwareVersion" value="" readonly><br>
-      <label for="serialNumber">Serial Number</label><br>
-      <input type="text" id="serialNumber" name="serialNumber" value="" readonly><br>
-      <label for="manufacturingDate">Manufacturing Date</label><br>
-      <input type="text" id="manufacturingDate" name="manufacturingDate" value="" readonly><br>
+      <table>
+       <tbody>
+       <tr>
+        <td><label for="signModel">Sign Model</label></td>
+        <td><input style="font-family:monospace" type="text" id="signModel" name="signModel" value="" readonly></td>
+      </tr>
+      <tr>
+        <td><label for="serialNumber">Serial Number</label></td>
+        <td><input style="font-family:monospace" type="text" id="serialNumber" name="serialNumber" value="" readonly></td>
+      </tr>
+      <tr>
+        <td><label for="manufacturingDate">Manufacturing Date</label></td>
+        <td><input style="font-family:monospace" type="text" id="manufacturingDate" name="manufacturingDate" value="" readonly></td>
+      </tr>
+      <tr>
+        <td><label for="boardModel">Board Model</label></td>
+        <td><input style="font-family:monospace" type="text" id="boardModel" name="boardModel" size="25" value="" readonly></td>
+      </tr>
+      <tr>
+        <td><label for="firmwareVersion">Firmware Version</label></td>
+        <td><input style="font-family:monospace" type="text" id="firmwareVersion" name="firmwareVersion" value="" readonly></td>
+      </tr>
+    </table>
     </form>
     <h1>WiFi Configuration</h1>
     <h4><span id="wifi-warn" style="background-color: yellow;"></span></h4>
     <form id="wifi">
-      <label>WiFi Mode:</label><br>
-      <input type="radio" id="sta" name="mode" value="sta"> <label for="sta">WiFi Client (recommended)</label><br>
-      <input type="radio" id="ap" name="mode" value="ap"> <label for="ap">Access Point</label><br>
-      <label for="css">Network Name (SSID)</label><br>
-      <input type="text" id="ssid" name="ssid" value="" maxlength="32"><br>
-      <label for="password">WiFi Key (Password)</label><br>
-      <input type="password" id="password" name="password" value="" maxlength="64"><br>
+      <table><tbody>
+        <tr>
+          <td><label>WiFi Mode</label></td>
+          <td>
+            <input type="radio" id="sta" name="mode" value="sta"> <label for="sta">WiFi Client (recommended)</label><br>
+            <input type="radio" id="ap" name="mode" value="ap"> <label for="ap">Access Point</label><br>
+          </td>
+        </tr>
+        <tr>
+          <td><label for="ssid">Network Name (SSID)</label></td>
+          <td><input style="font-family:monospace" type="text" id="ssid" name="ssid" value="" maxlength="32"></td>
+        </tr>
+        <tr>
+          <td><label for="psk">Pre-shared Key (Password)</label></td>
+          <td>
+            <input style="font-family:monospace" type="password" id="psk" name="psk" value="" maxlength="64"><br>
+            <input type="checkbox" onclick="togglePassword()">Show Password
+          </td>
+        </tr>
+      </table>
       <input type="submit" name="action" value="Submit"><br>
-      <span style="font-size:small; font-style:italic;">* Device will reboot after WiFi configuration changes. If client mode fails to connect, it will start again in Access Point (AP) mode (default settings)</span>
+      <span style="font-size:small; font-style:italic;">Device will reboot after WiFi configuration changes. If client mode fails </br>to connect, it will start again in Access Point (AP) mode (default settings)</span>
     </form>
     <h1>Tools</h1>
     <form>
@@ -51,12 +105,25 @@ const char *indexHtml = R"====(
     </form>
   </body>
   <script>
+    var colorMap = {
+      'red': 'LightPink',
+      'white': 'GhostWhite',
+      'blue': 'LightBlue',
+      'yellow': 'Yellow',
+      'green': 'LightGreen',
+    };
+
     function load() {
       loadStatus();
       loadDeviceInfo();
       loadWifiConfig();
 
       document.querySelector("#wifi").addEventListener("submit", updateWifi);
+    }
+
+    function togglePassword() {
+      const element = document.getElementById("psk");
+      element.type = (element.type === "password") ? "text" : "password";
     }
 
     async function loadStatus() {
@@ -74,7 +141,15 @@ const char *indexHtml = R"====(
       tbody.innerHTML = ""; // clear
       (data || []).panels.forEach(p => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td><img src="/resources/${p.name}.png" height="32"/></td><td>${p.name}</td><td>${p.color}</td><td>${p.state}</td><td>${p.intensity}</td>`;
+        const bgcolor = p.state === 'off' ? 'LightGray' : colorMap[p.color];
+        const blink = p.state.includes("blinking") ? p.state.replace("on-", "") : "";
+        const intensityPercentage = Math.round(p.intensity * 100.0 / 255.0) + '%';
+        tr.innerHTML = `
+          <td><img src="/resources/${p.name}.png" height="32" style="background-color:${bgcolor}" class="${blink}"/></td>
+          <td>${p.name}</td>
+          <td>${p.color}</td>
+          <td>${p.state}</td>
+          <td><span title="${p.intensity}">${intensityPercentage}</span></td>`;
         tbody.appendChild(tr);
       });
       console.info("Sign status loaded!");
@@ -92,10 +167,10 @@ const char *indexHtml = R"====(
       const data = await response.json(); // read response body as json
 
       document.getElementById('signModel').value = data.signModel;
-      document.getElementById('boardModel').value = data.boardModel;
-      document.getElementById('firmwareVersion').value = data.firmwareVersion;
       document.getElementById('serialNumber').value = data.serialNumber;
       document.getElementById('manufacturingDate').value = data.manufacturingDate;
+      document.getElementById('boardModel').value = data.boardModel;
+      document.getElementById('firmwareVersion').value = data.firmwareVersion;
 
       console.info("Device Information loaded!");
     }
@@ -113,7 +188,7 @@ const char *indexHtml = R"====(
 
       document.getElementById(data.mode).checked = true;
       document.getElementById('ssid').value = data.ssid;
-      document.getElementById('password').value = data.password;
+      document.getElementById('psk').value = data.psk;
 
       if (data.staConnectionFailed == true) {
         document.getElementById("wifi-warn").htmlContent = "Could not connect to configured WiFi network.<br>Check below fields are correct or if netowrk is available. <b>Default AP configuration was used</b>.";
@@ -126,17 +201,17 @@ const char *indexHtml = R"====(
 
       const mode = document.querySelector('#wifi > input[name="mode"]:checked').value;
       const ssid = document.getElementById('ssid').value?.trim();
-      const password = document.getElementById('password').value;
+      const psk = document.getElementById('psk').value;
       if (!ssid || ssid.length > 32) {
         alert('SSID cannot be empty or larger than 32 characters');
         return;
       }
-      if (!!password && (password.length > 64 || password.length < 8)) {
-        alert('Passkey must contain at least 8 and at most 64 characters');
+      if (!!psk && (psk.length > 64 || psk.length < 8)) {
+        alert('Pass key must contain at least 8 and at most 64 characters');
         return;
       }
 
-      const response = await post('/admin/wifi', { mode, ssid, password });
+      const response = await post('/admin/wifi', { mode, ssid, psk });
 
       if (response.ok) {
         document.getElementById("wifi-warn").textContent = "Successfully updated WiFi settings! Device will reboot";

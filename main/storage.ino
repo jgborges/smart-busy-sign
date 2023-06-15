@@ -7,8 +7,8 @@
 
 #define EEPROM_SET 42 // magig number to differentiate random bits from actual values written in EEPROM
 
+// permanent sign information
 struct DeviceInfo {
-  // permanent sign information
   byte setValue;
   char signModel[36];
   char serialNumber[26];
@@ -19,12 +19,12 @@ struct DeviceInfo {
   }
 };
 
+// wifi connection information
 struct WifiConfig {
-  // wifi connection information
   byte setValue;
   WiFiMode_t mode;
   char ssid[33]; // ssd can be 32 char at most
-  char psk[63];  // password can be 62 char at most
+  char psk[63];  // psk can be 62 char at most
 
   bool isWifiSet() {
     return this->setValue == EEPROM_SET;
@@ -43,17 +43,33 @@ struct WifiConfig {
   }
 };
 
+// User settings
+struct Settings {
+  byte setValue;
+  int tzOffsetInMinutes;
+  bool autoSleepEnabled;
+  byte autoSleepHourStart;
+  byte autoSleepHourEnd;
+
+  bool isSet() {
+    return this->setValue == EEPROM_SET;
+  }
+};
+
 DeviceInfo devInfo = {};
 WifiConfig wifiConfig = {};
+Settings settings = {};
 
 #define STORAGE_SIZE    4096.
 #define STORAGE_BLOCK   512
 #define DEVICE_INFO_POS 0*STORAGE_BLOCK
 #define WIFI_CONFIG_POS 1*STORAGE_BLOCK
+#define SETTINGS_POS    2*STORAGE_BLOCK
 
 void setupStorage() {
   loadDeviceInformation();
   loadWifiConfig();
+  loadSettings();
 }
 
 void loadDeviceInformation() {
@@ -65,7 +81,7 @@ void loadDeviceInformation() {
   if (!devInfo.isSet()) {
     Serial.println("Failed. Using default");
     devInfo.setValue = 0;
-    strncpy(devInfo.signModel, "smart-busy-sign-v1", sizeof(devInfo.signModel));
+    strncpy(devInfo.signModel, "smart-busy-sign", sizeof(devInfo.signModel));
     strncpy(devInfo.serialNumber, "0000000001", sizeof(devInfo.serialNumber));
     strncpy(devInfo.manufacturingDate, "2023-06-01", sizeof(devInfo.manufacturingDate));
   } else {
@@ -77,16 +93,65 @@ void loadDeviceInformation() {
   Serial.println(" manufacturing-date: " + String(devInfo.manufacturingDate));
 }
 
-void setDeviceInformation() {
+PostResult setDeviceInformation(String jsonBody) {
+  if (jsonBody.isEmpty()) {
+    return BAD_REQUEST;
+  }
+  DynamicJsonDocument doc(250);
+  DeserializationError err = deserializeJson(doc, jsonBody);
+  if (err) {
+    Serial.print("Deserialization error: ");
+    Serial.println(err.f_str());
+    return BAD_REQUEST;  
+  }
+  JsonObject root = doc.as<JsonObject>();
+  if (!root.containsKey("signModel") || !root.containsKey("serialNumber") || !root.containsKey("manufacturingDate")) {
+    Serial.println("missing one of the mandatory fields: signModel, serialNumber, manufacturingDate");
+    return BAD_REQUEST;
+  }
+  String signModel = root["signModel"];
+  String serialNumber = root["serialNumber"];
+  String manufacturingDate = root["manufacturingDate"];
+
+  if (signModel.isEmpty() || signModel.length() < 5) {
+    Serial.println("signModel field should have at least 5 characters");
+    return BAD_REQUEST;
+  }
+  if (serialNumber.isEmpty() || serialNumber.length() < 5) {
+    Serial.println("serialNumber field should have at least 5 characters");
+    return BAD_REQUEST;
+  }
+  if (manufacturingDate.isEmpty() || manufacturingDate.length() < 10) {
+    Serial.println("manufacturingDate field should have at least 100 characters and preferably in the YYYY/MM/DD format");
+    return BAD_REQUEST;
+  }
+
+  devInfo.setValue = EEPROM_SET;
+  strcpy(devInfo.signModel, signModel.c_str());
+  strcpy(devInfo.serialNumber, serialNumber.c_str());
+  strcpy(devInfo.manufacturingDate, manufacturingDate.c_str());
+
+  Serial.println("Persisting config information on EEPROM");
+
+  Serial.println("Content to write:");
+  Serial.println(" signModel: " + String(devInfo.signModel));
+  Serial.println(" serialNumber: " + String(devInfo.serialNumber));
+  Serial.println(" manufacturingDate: " + String(devInfo.manufacturingDate));
+
+  EEPROM.begin(STORAGE_SIZE);
+  EEPROM.put(DEVICE_INFO_POS, devInfo);
+  EEPROM.end();
+
+  return POST_SUCCESS; 
 }
 
 String getDeviceInformation() {
   String msg = "{ ";
   msg += "\"signModel\": \"" + String(devInfo.signModel) + "\",";
+  msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\",";
+  msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\",";
   msg += "\"boardModel\": \"" + String(ARDUINO_BOARD) + "\",";
-  msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\",";
-  msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\", ";
-  msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\" ";
+  msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\"";
   msg += "}";
   return msg;
 }
@@ -118,7 +183,7 @@ String getDefaultSSID() {
   return ssid;
 }
 
-String getDefaultPassword() {
+String getDefaultPsk() {
   return String(AP_PSK);
 }
 
@@ -129,7 +194,7 @@ String getWifiConfig() {
   }
   msg += "\"mode\": \"" + wifiConfig.modeAsString() + "\",";
   msg += "\"ssid\": \"" + String(wifiConfig.ssid) + "\", ";
-  msg += "\"password\": \"" + String(wifiConfig.psk) + "\" ";
+  msg += "\"psk\": \"" + String(wifiConfig.psk) + "\" ";
   msg += "}";
   return msg;
 }
@@ -152,11 +217,11 @@ PostResult setWifiConfig(String jsonBody) {
   }
   String mode = root["mode"];
   String ssid = root["ssid"];
-  String password = root.containsKey("password") ? root["password"] : String("");
-  return setWifiConfig(mode, ssid, password);  
+  String psk = root.containsKey("psk") ? root["psk"] : String("");
+  return setWifiConfig(mode, ssid, psk);  
 }
 
-PostResult setWifiConfig(String mode, String ssid, String password) {
+PostResult setWifiConfig(String mode, String ssid, String psk) {
   bool isAP = mode.equals("ap");
   bool isSTA = mode.equals("sta");
   bool isOFF = mode.equals("off");
@@ -166,7 +231,7 @@ PostResult setWifiConfig(String mode, String ssid, String password) {
   if (ssid.isEmpty() || ssid.length() == 0 || ssid.length() > 32) {
     return BAD_REQUEST;
   }
-  if (!password.isEmpty() && (password.length() > 64 || password.length() < 8)) {
+  if (!psk.isEmpty() && (psk.length() > 64 || psk.length() < 8)) {
     return BAD_REQUEST;
   }
 
@@ -174,7 +239,7 @@ PostResult setWifiConfig(String mode, String ssid, String password) {
   wifiConfig.mode = isAP ?  WIFI_AP :
                     isSTA ? WIFI_STA : WIFI_OFF;
   strcpy(wifiConfig.ssid, ssid.c_str());
-  strcpy(wifiConfig.psk, password.c_str());
+  strcpy(wifiConfig.psk, psk.c_str());
 
   Serial.println("Persisting config information on EEPROM");
 
@@ -199,8 +264,8 @@ void setDefaultWifiConfig() {
   strcpy(wifiConfig.ssid, ssid.c_str());
 
   memset(wifiConfig.psk, '\0', sizeof wifiConfig.psk);  
-  String password = getDefaultPassword();
-  strcpy(wifiConfig.psk, password.c_str());
+  String psk = getDefaultPsk();
+  strcpy(wifiConfig.psk, psk.c_str());
 }
 
 void factoryReset(bool fullReset) {
@@ -214,4 +279,28 @@ void factoryReset(bool fullReset) {
   }
   EEPROM.end();
   Serial.println("Done");
+}
+
+void loadSettings() {
+  Serial.print("Reading user Settings from EEPROM...");
+  EEPROM.begin(STORAGE_SIZE);
+  EEPROM.get(SETTINGS_POS, settings);
+  EEPROM.end();
+
+  if (!settings.isSet()) {
+    Serial.println("Failed. Using default");
+    settings.setValue = 0;
+    settings.tzOffsetInMinutes = -3*60; // BR timezone
+    settings.autoSleepEnabled = true;
+    settings.autoSleepHourStart = 20;
+    settings.autoSleepHourEnd = 7;
+  } else {
+    Serial.println("Done");
+  }
+
+  Serial.println(" tz-offset: " + String(settings.tzOffsetInMinutes));
+  Serial.println(" auto-sleep: " + String(settings.autoSleepEnabled));
+  Serial.print(" auto-sleep: start=" + String(settings.autoSleepHourStart));
+  Serial.print("h, end=" + String(settings.autoSleepHourEnd));
+  Serial.println("h");
 }
