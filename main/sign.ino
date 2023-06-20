@@ -41,30 +41,203 @@
 
 */
 
-#define ON LOW
-#define OFF HIGH
+#define SIGN_SN_DEFAULT 10001
 
-#define NO_GPIO 255
+#define SIGN_MODEL "smart-busy-sign_V0"
+#define SIGN_VERSION "V0"
+
+#define RESET_GPIO D6
+
+const std::map<LedTypes, String> LedToColor = {
+  { WHITE, "white" },
+  { YELLOW, "yellow" },
+  { RED, "red" },
+  { GREEN, "green" },
+  { BLUE, "blue" },
+  { RGB_RED, "#FF0000" },
+  { RGB_GREEN, "#FF0000" },
+  { RGB_BLUE, "#FF0000" },
+};
+
+const std::map<String, LedTypes> ColorToLed = {
+  { "white", WHITE },
+  { "yellow", YELLOW },
+  { "red", RED },
+  { "green", GREEN },
+  { "blue", BLUE },
+};
+
+std::map<String, PanelStatus> statusMap;
 
 void setupSign() {
-  setupGpio(); // set all to disabled
+  setupGpio(panelSetupMap); // set all to disabled
 
-  Serial.print("Enabling all panels...");
-  for (int i=0; i < panelSetupsLen; i++) {
-    byte gpio = panelSetups[i].gpio;
-    pinMode(gpio, OUTPUT);
-    digitalWrite(gpio, ON);
-  }
-  delay(3000); // turn all lights on after turn on
-  for (int i=0; i < panelSetupsLen; i++) {
-    byte gpio = panelSetups[i].gpio;
-    pinMode(gpio, OUTPUT);
-    digitalWrite(gpio, OFF);
-  }
-  Serial.println("done!"); 
-
+  initStatus();
   // appy default sign status
   applySignStatus(); // turn all of as gpios are initiated in DISABLED state
+}
+
+void initStatus() {
+  int numOfPanels = 0;
+  for (auto& item: panelSetupMap) {
+    String name = item.first;
+    LedTypes firstLed = item.second.begin()->first;
+    String color = LedToColor.at(firstLed);
+    if (isLedRGB(firstLed)) {
+      color = "#FFFFFF"; // equivalent to white
+    }
+    PanelStatus pstatus = { name, PANEL_OFF, color, 255 };
+    statusMap.insert(std::pair<String, PanelStatus>(name, pstatus));
+  }
+}
+
+bool isLedRGB(LedTypes led) {
+  return led == RGB_RED ||
+         led == RGB_GREEN ||
+         led == RGB_BLUE;
+}
+
+void applySignStatus() {
+  for (auto& item: statusMap) {
+    applySignStatus(item.second);
+  }
+}
+
+void applySignStatus(PanelStatus panel) {
+  String name = panel.name;
+  String color = panel.color;
+  PanelState state = panel.state;
+  byte intensity = panel.intensity;
+
+  Serial.println("Updating panel " + name + " to '" + panelStateToString(state) + "' state");
+  LedTypes firstLed = panelSetupMap.at(name).begin()->first;
+  bool panelIsRGB = isLedRGB(firstLed);
+  if (panelIsRGB) {
+    int r, g, b;
+    if (!colorToRGB(color, intensity, r, g, b)) {
+      Serial.println(" could not update to color " + color + ": unknown color");
+      return;
+    }
+    Serial.println(" set color RGB (" + String(r) + "," + String(g) + "," + String(b) + ")");
+    byte r_gpio = panelSetupMap.at(name).at(RGB_RED).gpio;
+    setLightState(r_gpio, state, r);
+    byte g_gpio = panelSetupMap.at(name).at(RGB_GREEN).gpio;
+    setLightState(g_gpio, state, g);
+    byte b_gpio = panelSetupMap.at(name).at(RGB_BLUE).gpio;
+    setLightState(b_gpio, state, b);
+    return;
+  }
+
+  if (color.startsWith("#")) {
+    Serial.println(" panel does not support RGB color");
+    return;
+  }
+  if (!ColorToLed.count(color)) {
+    Serial.println(" could not find gpio for panel " + name);
+    return;
+  }
+
+  LedTypes ledToSet = ColorToLed.at(color);
+  for (auto& item: panelSetupMap.at(name)) {
+    LedTypes led = item.first;
+    byte gpio = item.second.gpio;
+    if (led == ledToSet) { 
+      setLightState(gpio, state, intensity);
+    } else {
+      setLightState(gpio, PANEL_OFF, intensity);
+    }
+  }
+}
+
+String getSignStatus() {
+  DynamicJsonDocument doc(2000);
+  doc["timestamp"] = getEpochTime();
+  doc["model"] = SIGN_MODEL;
+  doc["serial-number"] = SIGN_SN_DEFAULT;
+  doc["hw-model"] = ARDUINO_BOARD;
+  doc["hw-version"] = ARDUINO_ESP8266_RELEASE;
+  doc["server-version"] = String(FW_MAJOR) + "." + String(FW_MINOR);
+  doc["manufacturing-date"] = "2023-06-01";
+
+  JsonArray statusArray = doc.createNestedArray("panels");
+  for (auto& item: statusMap) {
+    PanelStatus pstatus = item.second;
+    DynamicJsonDocument status(300);
+    status["name"] = pstatus.name;
+    status["state"] = panelStateToString(pstatus.state);
+    status["color"] = pstatus.color;
+    status["intensity"] = pstatus.intensity;
+    status["ttl"] = pstatus.ttl;
+    statusArray.add(status);
+  }
+
+  String message = "";
+  serializeJsonPretty(doc, message);
+  return message;
+}
+
+ParsingResult setSignStatus(String statusJson) {
+  if (statusJson.isEmpty()) {
+    return JSON_PARSING_ERROR;
+  }
+  DynamicJsonDocument doc(2000);
+  DeserializationError err = deserializeJson(doc, statusJson);
+  if (err) {
+    Serial.print("Deserialization error: ");
+    Serial.println(err.f_str());
+    return JSON_PARSING_ERROR;  
+  }
+  JsonObject root = doc.as<JsonObject>();
+  if (!root.containsKey("panels") || !root["panels"].is<JsonArray>()) {
+    Serial.println("missing panels field");
+    return JSON_MISSING_PANELS_FIELD;
+  }
+  JsonArray panels = root["panels"].as<JsonArray>();
+  Serial.println("Panels to update: " + String(panels.size()));
+  for (JsonObject panel : panels) {
+    if (!panel.containsKey("name") || panel["name"].as<String>().isEmpty()) {
+      Serial.println("missing name field");
+      return JSON_MISSING_NAME_FIELD;
+    }
+    if (!panel.containsKey("state")) {
+      Serial.println("missing color or state field");
+      return JSON_MISSING_STATE_FIELD;
+    }
+    String name = panel["name"];
+    String state = panel["state"];
+    String color = panel["color"] | "";
+    String intensity = panel["intensity"] | "";
+    setPanelStatus(name, color, state, intensity);
+  }
+  return PARSE_SUCCESS;
+}
+
+void setPanelStatus(String name, String color, String state, String intensity) {
+  for (auto& item: statusMap) {
+    PanelStatus& panel = item.second;
+    if (!name.equals(panel.name)) {
+      continue;
+    }
+    if (!color.isEmpty()) {
+      panel.color = color;
+    }
+    if (!intensity.isEmpty()) {
+      panel.intensity = getIntensityByte(intensity);
+    }
+    panel.state = parsePanelState(state);
+    applySignStatus(panel);
+    return;
+  }
+  Serial.println("Panel does not exists! " + name + " | " + color);
+}
+
+byte getIntensityByte(String value) {
+  int intValue = value.toInt();
+  if (intValue > 0 && intValue < 255) {
+    return (byte)intValue;
+  } else {
+    return 255;
+  }
 }
 
 String panelStateToString(PanelState state) {
@@ -101,128 +274,35 @@ PanelState parsePanelState(String state) {
   }
 }
 
-void applySignStatus() {
-  for (int i=0; i < panelStatusLen; i++) {
-    applySignStatus(panelStatus[i]);
-  }
-}
-
-void applySignStatus(PanelStatus panel) {
-  String name = panel.name;
-  String color = panel.color;
-  PanelState state = panel.state;
-  byte intensity = panel.intensity;
-
-  uint8_t gpio = findPanelSetupPin(name, color);
-  if (gpio != NO_GPIO) {
-    Serial.println("Updating panel " + name + " to '" + panelStateToString(state) + "' state");
-    setLightState(gpio, state, intensity);
+bool colorToRGB(String color, byte intensity, int& r, int& g, int& b) {
+  if (color.equals("white")) {
+    r = intensity;
+    g = intensity;
+    b = intensity;
+  } else if (color.equals("red")) {
+    r = intensity;
+    g = 0;
+    b = 0;
+  } else if (color.equals("green")) {
+    r = 0;
+    g = intensity;
+    b = 0;
+  } else if (color.equals("blue")) {
+    r = 0;
+    g = 0;
+    b = intensity;
+  } else if (color.equals("yellow")) {
+    r = intensity;
+    g = intensity;
+    b = 0;
+  } else if (color.startsWith("#") && color.length() == 7) {
+    long hexValue = (long) strtol( &color[1], NULL, 16);
+    float alpha = (float)intensity;
+    r = ((hexValue >> 16) & 0xFF) * alpha / 255.0; // Extract the RR byte
+    g = ((hexValue >> 8) & 0xFF) * alpha / 255.0; // Extract the GG byte
+    b = ((hexValue) & 0xFF) * alpha / 255.0; // Extract the BB byte
   } else {
-    Serial.println("Could not find gpio for panel " + name);
+    return false;
   }
-}
-
-byte findPanelSetupPin(String name, String color) {
-  for (int i=0; i < panelSetupsLen; i++) {
-    if (!name.equals(panelSetups[i].name)) {
-      continue;
-    }
-    if (!color.isEmpty() && !color.equals(panelSetups[i].color)) {
-      continue;
-    }
-    return panelSetups[i].gpio;
-  }
-  return NO_GPIO;
-}
-
-String getSignStatus() {
-  DynamicJsonDocument doc(2000);
-  doc["timestamp"] = getEpochTime();
-  doc["model"] = SIGN_MODEL;
-  doc["serial-number"] = SIGN_SN;
-  doc["hw-model"] = ARDUINO_BOARD;
-  doc["hw-version"] = ARDUINO_ESP8266_RELEASE;
-  doc["server-version"] = String(FW_MAJOR) + "." + String(FW_MINOR);
-  doc["manufacturing-date"] = "2023-06-01";
-
-  JsonArray statusArray = doc.createNestedArray("panels");
-  for (int p=0; p < panelStatusLen; p++) {
-    DynamicJsonDocument status(300);
-    status["name"] = panelStatus[p].name;
-    status["state"] = panelStateToString(panelStatus[p].state);
-    status["color"] = panelStatus[p].color;
-    status["intensity"] = panelStatus[p].intensity;
-    status["ttl"] = panelStatus[p].ttl;
-    statusArray.add(status);
-  }
-
-  String message = "";
-  serializeJsonPretty(doc, message);
-  return message;
-}
-
-ParsingResult setSignStatus(String statusJson) {
-  if (statusJson.isEmpty()) {
-    return JSON_PARSING_ERROR;
-  }
-  DynamicJsonDocument doc(2000);
-  DeserializationError err = deserializeJson(doc, statusJson);
-  if (err) {
-    Serial.print("Deserialization error: ");
-    Serial.println(err.f_str());
-    return JSON_PARSING_ERROR;  
-  }
-  JsonObject root = doc.as<JsonObject>();
-  if (!root.containsKey("panels") || !root["panels"].is<JsonArray>()) {
-    Serial.println("missing panels field");
-    return JSON_MISSING_PANELS_FIELD;
-  }
-  JsonArray panels = root["panels"].as<JsonArray>();
-  Serial.println("Panels to update: " + String(panels.size()));
-  for (JsonObject panel : panels) {
-    Serial.println("Iterating panels to update!");
-    Serial.println(String(panel["name"]));
-    if (!panel.containsKey("name") || panel["name"].as<String>().isEmpty()) {
-      Serial.println("missing name field");
-      return JSON_MISSING_NAME_FIELD;
-    }
-    if (!panel.containsKey("state")) {
-      Serial.println("missing color or state field");
-      return JSON_MISSING_STATE_FIELD;
-    }
-    String name = panel["name"];
-    String state = panel["state"];
-    String color = panel["color"] | "";
-    String intensity = panel["intensity"] | "";
-    setPanelStatus(name, color, state, intensity);
-  }
-  return PARSE_SUCCESS;
-}
-
-void setPanelStatus(String name, String color, String state, String intensity) {
-  for (int i=0; i < panelStatusLen; i++) {
-    PanelStatus& panel = panelStatus[i];
-    if (!name.equals(panel.name)) {
-      continue;
-    }
-    if (!color.isEmpty()) {
-      panel.color = color;
-    }
-    if (!intensity.isEmpty()) {
-      panel.intensity = getIntensityByte(intensity);
-    }
-    panel.state = parsePanelState(state);
-    applySignStatus(panel);
-    return;
-  }
-  Serial.println("Panel does not exists! " + name + " | " + color);
-}
-
-byte getIntensityByte(String value) {
-  int intValue = value.toInt();
-  if (intValue > 0 && intValue < 255) {
-    return (byte)intValue;
-  } else {
-    return 255;
-  }
+  return true;
 }

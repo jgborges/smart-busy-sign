@@ -141,7 +141,7 @@ const char *indexHtml = R"====(
       tbody.innerHTML = ""; // clear
       (data || []).panels.forEach(p => {
         const tr = document.createElement('tr');
-        const bgcolor = p.state === 'off' ? 'LightGray' : colorMap[p.color];
+        const bgcolor = p.state === 'off' ? 'LightGray' : colorMap[p.color] || p.color;
         const blink = p.state.includes("blinking") ? p.state.replace("on-", "") : "";
         const intensityPercentage = Math.round(p.intensity * 100.0 / 255.0) + '%';
         tr.innerHTML = `

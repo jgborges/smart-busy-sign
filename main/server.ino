@@ -59,7 +59,6 @@ void handleStatus() {
     webServer.send(200, "application/json", message);
   } else {
     Serial.println("Handle POST /status");
-    printRequestArgs();
     if (!webServer.hasArg("plain")) {
       webServer.send(400, "application/json", "no body");
       return;

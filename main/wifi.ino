@@ -1,4 +1,6 @@
 #define FIFTEEN_SECONDS 10000
+#define ON LOW
+#define OFF HIGH
 
 const char* hostname = "smart-busy-sign";
 

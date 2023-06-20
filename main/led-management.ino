@@ -1,72 +1,42 @@
-#define ON LOW
-#define OFF HIGH
-
-// 0.3 second cycle
-#define BLINK_FAST_INTERVAL_ON 150
-#define BLINK_FAST_INTERVAL_OFF 150
-
-// 0.9 second cycle
-#define BLINK_DEFAULT_INTERVAL_ON 600
-#define BLINK_DEFAULT_INTERVAL_OFF 300
-
-// 1.5 second cycle
-#define BLINK_SLOW_INTERVAL_ON 900
-#define BLINK_SLOW_INTERVAL_OFF 600
-
-struct GpioState {
-  PanelState state;
-  byte intensity;
-
-  BlinkingType blinkingType() {
-    switch (this->state) {
-      case PANEL_BLINKING:
-        return BLINKING_NORMAL;
-      case PANEL_BLINKING_FAST:
-        return BLINKING_FAST;
-      case PANEL_BLINKING_SLOW:
-        return BLINKING_SLOW;
-      default:
-        return BLINKING_OFF;
-    }
-  }
-};
-
-ulong lastBlinkCheck;
-const int NUM_BLINKING_TYPES = BLINKING_OFF - BLINKING_NORMAL; // we don't add OFF as an option
-
-struct BlinkingState {
-  // blinking params
-  ushort intervalOn;
-  ushort intervalOff;
-  // manage on/off state for blinking effect
-  bool isLightOn;
-  ulong lastStateChangeMillis;
+// blinking intervals, coded as { <iterval on>, <interval off> } in milliseconds
+const std::map<BlinkingType, std::array<ushort, 2>> BlinkIntervals = {
+  { BLINKING_SLOW,   { 900, 600 }}, // 1.5 second cycle
+  { BLINKING_NORMAL, { 600, 300 }}, // 0.9 second cyble
+  { BLINKING_FAST,   { 150, 150 }}  // 0.3 second cycle
 };
 
 GpioState gpioStates[NUM_DIGITAL_PINS]; // ESP8266 has 16 GPIOs
-BlinkingState blinkingStates[NUM_BLINKING_TYPES];
+BlinkingState blinkingStates[NumBlinkingTypes];
 
-void setupGpio() {
+ulong lastBlinkCheck;
+
+void setupGpio(const PanelSetup& setup) {
+  // initialize default values
   for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
     gpioStates[gpio].state = PANEL_DISABLED;
     gpioStates[gpio].intensity = 255;
   }
+
+  for (auto& item: setup) {
+    for (auto& led: item.second) {
+      byte gpio = led.second.gpio;
+      pinMode(gpio, OUTPUT);
+      gpioStates[gpio].state = PANEL_OFF;
+      gpioStates[gpio].isPosAnode = led.second.isPosAnode;
+    }
+  }
+
+  testLeds();
   
+  // initialize and configure blinking states
   int now = millis();
-  blinkingStates[BLINKING_FAST].intervalOn = BLINK_FAST_INTERVAL_ON;
-  blinkingStates[BLINKING_FAST].intervalOff = BLINK_FAST_INTERVAL_OFF;
-  blinkingStates[BLINKING_FAST].isLightOn = false;
-  blinkingStates[BLINKING_FAST].lastStateChangeMillis = now;
-
-  blinkingStates[BLINKING_NORMAL].intervalOn = BLINK_DEFAULT_INTERVAL_ON;
-  blinkingStates[BLINKING_NORMAL].intervalOff = BLINK_DEFAULT_INTERVAL_OFF;
-  blinkingStates[BLINKING_NORMAL].isLightOn = false;
-  blinkingStates[BLINKING_NORMAL].lastStateChangeMillis = now;
-
-  blinkingStates[BLINKING_SLOW].intervalOn = BLINK_SLOW_INTERVAL_ON;
-  blinkingStates[BLINKING_SLOW].intervalOff = BLINK_SLOW_INTERVAL_OFF;
-  blinkingStates[BLINKING_SLOW].isLightOn = false;
-  blinkingStates[BLINKING_SLOW].lastStateChangeMillis = now;
+  for (int i=0; i < NumBlinkingTypes; i++) {
+    std::array<ushort, 2> interval = BlinkIntervals.at((BlinkingType)i);
+    blinkingStates[i].intervalOn = interval[0];
+    blinkingStates[i].intervalOff = interval[1];
+    blinkingStates[i].isLightOn = false;
+    blinkingStates[i].lastStateChangeMillis = now;
+  }
 
   lastBlinkCheck = now;
 }
@@ -81,15 +51,20 @@ bool isOff(PanelState state) {
 
 void turnLightOn(uint8_t gpio, byte intensity = 255) {
   bool isPWM = intensity > 0 && intensity < 255;
-  if (isPWM) {
-    analogWrite(gpio, 255-intensity); // we turn LED on by setting LOW to cathode, so the we need the complement of 255 for intensity
+  bool isPosAnode = gpioStates[gpio].isPosAnode;
+  if (intensity == 0) {
+    turnLightOff(gpio);
+  } else if (isPWM) {
+    byte value = isPosAnode ? intensity : (255-intensity);
+    analogWrite(gpio,  value);
   } else {
-    digitalWrite(gpio, ON);
+    digitalWrite(gpio, isPosAnode ? HIGH : LOW);
   }
 }
 
 void turnLightOff(uint8_t gpio) {
-  digitalWrite(gpio, OFF);
+  bool isPosAnode = gpioStates[gpio].isPosAnode;
+  digitalWrite(gpio, isPosAnode ? LOW : HIGH);
 }
 
 void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
@@ -97,6 +72,11 @@ void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   if (gpio >= NUM_DIGITAL_PINS) {
     Serial.println("invalid gpio pin");
     return;
+  }
+
+  // This is common for RGB cases
+  if (newIntensity == 0) {
+    newState = PANEL_OFF;
   }
 
   GpioState& light = gpioStates[gpio];
@@ -108,7 +88,7 @@ void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   light.state = newState;
   light.intensity = newIntensity; 
 
-  if (isOff(newState)) {
+  if (isOff(newState) || newIntensity == 0) {
     Serial.println("turn off");
     turnLightOff(gpio);
   } else if (isOn(newState)) {
@@ -118,8 +98,28 @@ void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   } else {
     // set blinking state
     Serial.println("turn on blinking");
+    turnLightOn(gpio, light.intensity);
     handleBlinking();
   }
+}
+
+void testLeds() {
+  // turn all lights on, when initializing board, then off
+  Serial.print("Enabling all panels...");
+  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+    if (gpioStates[gpio].state == PANEL_DISABLED) {
+      continue;
+    }
+    turnLightOn(gpio, 255);
+  }
+  delay(3000); 
+  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+    if (gpioStates[gpio].state == PANEL_DISABLED) {
+      continue;
+    }
+    turnLightOff(gpio);
+  }
+  Serial.println("done!"); 
 }
 
 void handleBlinking() {
@@ -130,20 +130,21 @@ void handleBlinking() {
     lastBlinkCheck = now;
   }
   
-  for (int i=0; i < NUM_BLINKING_TYPES; i++) {
+  for (int i=0; i < NumBlinkingTypes; i++) {
     BlinkingType blinkType = (BlinkingType)i;
-    BlinkingState& blink = blinkingStates[blinkType];
+    BlinkingState& blink = blinkingStates[i];
     ulong elapsed = now - blink.lastStateChangeMillis;
     ulong interval = blink.isLightOn ? blink.intervalOn : blink.intervalOff;
     bool trigger = elapsed > interval;
     if (trigger) {
       blink.isLightOn = !blink.isLightOn;
       for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
-        if (gpioStates[gpio].blinkingType() != blinkType) {
+        GpioState& light = gpioStates[gpio];
+        if (light.blinkingType() != blinkType) {
           continue;
         }
         if (blink.isLightOn) {
-          turnLightOn(gpio, gpioStates[gpio].intensity);
+          turnLightOn(gpio, light.intensity);
         } else {
           turnLightOff(gpio);
         }
