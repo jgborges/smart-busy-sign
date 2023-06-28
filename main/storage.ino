@@ -147,11 +147,18 @@ PostResult setDeviceInformation(String jsonBody) {
 
 String getDeviceInformation() {
   String msg = "{ ";
-  msg += "\"signModel\": \"" + String(devInfo.signModel) + "\",";
-  msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\",";
-  msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\",";
-  msg += "\"boardModel\": \"" + String(ARDUINO_BOARD) + "\",";
-  msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\"";
+    msg += "\"signModel\": \"" + String(devInfo.signModel) + "\",";
+    msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\",";
+    msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\",";
+    msg += "\"boardModel\": \"" + String(ARDUINO_BOARD) + "\",";
+    msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\",";
+    msg += "\"inputVoltage\": \"" + String(ESP.getVcc()/1000.0) + "\",";
+    msg += "\"memory\": {";
+      msg += "\"freHeapSize\": \"" + String(ESP.getMaxFreeBlockSize()) + "\",";
+      msg += "\"heapFragmentation\": \"" + String(ESP.getHeapFragmentation()) + "\",";
+      msg += "\"sketchSize\": \"" + String(ESP.getSketchSize()) + "\",";
+      msg += "\"freeSketchSize\": \"" + String(ESP.getFreeSketchSpace()) + "\"";
+    msg += "}";
   msg += "}";
   return msg;
 }

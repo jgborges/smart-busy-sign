@@ -8,6 +8,8 @@
 const short FW_MAJOR = 1;
 const short FW_MINOR = 0;
 
+ADC_MODE(ADC_VCC);
+
 bool staConnectionFailed = false;
 
 void setup() {
