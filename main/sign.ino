@@ -69,12 +69,16 @@ const std::map<String, LedTypes> ColorToLed = {
 
 std::map<String, PanelStatus> statusMap;
 
+ulong lastTTLCheck;
+
 void setupSign() {
   setupGpio(panelSetupMap); // set all to disabled
 
   initStatus();
   // appy default sign status
   applySignStatus(); // turn all of as gpios are initiated in DISABLED state
+
+  lastTTLCheck = millis();
 }
 
 void initStatus() {
@@ -91,10 +95,39 @@ void initStatus() {
   }
 }
 
+void handleTTL() {
+  ulong now = millis();
+  long elapsed = (now - lastTTLCheck);
+  if (elapsed < TTL_CHECK_PERIOD_MS) {
+    return;
+  } else {
+    lastTTLCheck = now;
+  }
+  for (auto& item: statusMap) {
+    PanelStatus& pstatus = item.second;
+    if (isPanelOn(pstatus.state)) {
+      long elapsedInSconds = (elapsed/1000);
+      long remaining = std::max((long)0, pstatus.ttl - elapsedInSconds); // in seconds
+      if (remaining <= 0) {
+        pstatus.state = PANEL_OFF;
+        pstatus.ttl = 0;
+        Serial.println("Tuning panel '" + item.first + "' off due to TTL");
+        applySignStatus(pstatus);
+      } else {
+        pstatus.ttl = (ushort)remaining;
+      }
+    }
+  }
+}
+
 bool isLedRGB(LedTypes led) {
   return led == RGB_RED ||
          led == RGB_GREEN ||
          led == RGB_BLUE;
+}
+
+bool isPanelOn(PanelState state) {
+  return state != PANEL_DISABLED && state != PANEL_OFF;
 }
 
 void applySignStatus() {
@@ -152,12 +185,9 @@ void applySignStatus(PanelStatus panel) {
 String getSignStatus() {
   DynamicJsonDocument doc(2000);
   doc["timestamp"] = getEpochTime();
-  doc["model"] = SIGN_MODEL;
-  doc["serial-number"] = SIGN_SN_DEFAULT;
-  doc["hw-model"] = ARDUINO_BOARD;
-  doc["hw-version"] = ARDUINO_ESP8266_RELEASE;
-  doc["server-version"] = String(FW_MAJOR) + "." + String(FW_MINOR);
-  doc["manufacturing-date"] = "2023-06-01";
+  doc["uptime"] = getUptime();
+  doc["signModel"] = SIGN_MODEL;
+  doc["firmwareVersion"] = String(FW_MAJOR) + "." + String(FW_MINOR);
 
   JsonArray statusArray = doc.createNestedArray("panels");
   for (auto& item: statusMap) {
@@ -207,24 +237,32 @@ ParsingResult setSignStatus(String statusJson) {
     String state = panel["state"];
     String color = panel["color"] | "";
     String intensity = panel["intensity"] | "";
-    setPanelStatus(name, color, state, intensity);
+    ushort ttl = (ushort)String(panel["ttl"] | "0").toInt();
+
+    setPanelStatus(name, state, color, intensity, ttl);
   }
   return PARSE_SUCCESS;
 }
 
-void setPanelStatus(String name, String color, String state, String intensity) {
+void setPanelStatus(String name, String state, String color, String intensity, ushort ttl) {
   for (auto& item: statusMap) {
     PanelStatus& panel = item.second;
     if (!name.equals(panel.name)) {
       continue;
     }
+    panel.state = parsePanelState(state);
     if (!color.isEmpty()) {
       panel.color = color;
     }
     if (!intensity.isEmpty()) {
       panel.intensity = getIntensityByte(intensity);
     }
-    panel.state = parsePanelState(state);
+    if (isPanelOn(panel.state)) {
+      panel.ttl = ttl > 0 ? ttl : getDefaultTTL();
+    } else {
+      panel.ttl = 0;
+    }
+
     applySignStatus(panel);
     return;
   }

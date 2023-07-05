@@ -45,7 +45,6 @@ const char *indexHtml = R"====(
       <tbody>
       </tbody>
     </table>
-    <span style="font-size:small; font-style:italic;">* Light intensity ranges from 0 to 255</span><br>
     <input type="button" value="Refresh" onclick="loadStatus()" />
     <h1>Device Information</h1>
     <form>

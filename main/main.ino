@@ -1,8 +1,22 @@
-#include <ESP8266WiFi.h>
-#include <ESP8266NetBIOS.h>
-#include <ESP8266mDNS.h>
-#include <ESP8266WebServer.h>
+#if defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <ESP8266NetBIOS.h>
+  #include <ESP8266mDNS.h>
+  #include <ESP8266WebServer.h>
+
+  #define BOARD_MODEL ARDUINO_BOARD
+  #define BOARD_ID ARDUINO_BOARD_ID
+  #define BOARD_VERSION ARDUINO_ESP8266_RELEASE
+#elif defined(ESP32)
+  #include <WiFi.h>
+
+  #define BOARD_MODEL ARDUINO_BOARD
+  #define BOARD_ID ARDUINO_BOARD_ID
+  #define BOARD_VERSION ARDUINO_ESP32_RELEASE
+#endif
+
 #include <ArduinoJson.h>
+#include <algorithm>
 #include "defines.h"
 
 const short FW_MAJOR = 1;
@@ -25,17 +39,18 @@ void setup() {
 
   // print board info
   Serial.print(F("Board name: "));
-  Serial.println(ARDUINO_BOARD);
+  Serial.println(BOARD_MODEL);
   Serial.print(F("Board id: "));
-  Serial.println(ARDUINO_BOARD_ID);
+  Serial.println(BOARD_ID);
   Serial.print(F("Board version: "));
-  Serial.println(ARDUINO_ESP8266_RELEASE);
+  Serial.println(BOARD_VERSION);
 
   setupSign();
   setupStorage();
   setupWifi();
   setupWebServer();
   setupTime();
+  setupAlexa();
 }
 
 void loop() {
@@ -43,11 +58,18 @@ void loop() {
   handleSleep();
   handleClient();
   handleBlinking();
+  handleTTL();
+  handleAlexa();
   yield();
+}
+
+bool isWakingFromDeepSleep() {
+  return ESP.getResetInfoPtr()->reason == REASON_DEEP_SLEEP_AWAKE;
 }
 
 void reboot() {
   Serial.println("Reboot...");
+  delay(100);
   yield();
   ESP.restart();
 }

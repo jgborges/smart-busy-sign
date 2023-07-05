@@ -1,8 +1,14 @@
 #include <map>
 #include <array>
 
+#define DEBUG_FAUXMO Serial
+
 #define ANODE_CONTROL_LED true
 #define CATHODE_CONTROL_LED false
+
+#define BLINK_CHECK_PERIOD_MS 100   // every 100 ms
+#define TTL_CHECK_PERIOD_MS   5000  // every 5 seconds
+#define SLEEP_CHECK_PERIOD_MS 60000 // every 1 minute
 
 enum LedTypes {
   WHITE, YELLOW, RED, GREEN, BLUE, RGB_RED, RGB_GREEN, RGB_BLUE 
@@ -17,14 +23,14 @@ typedef std::map<String, std::map<LedTypes, LedSetup>> PanelSetup;
 
 // initialize with default panel setup
 const PanelSetup panelSetupMap = {
-  { "busy",           { {WHITE,    {D1,CATHODE_CONTROL_LED}}, 
-                        {RED,      {D2,CATHODE_CONTROL_LED}} }},
-  { "do-not-disturb", { {RED,      {D3,CATHODE_CONTROL_LED}} }},
-  { "camera",         { {YELLOW,   {D5,CATHODE_CONTROL_LED}} }},
-  { "microphone",     { {YELLOW,   {D6,CATHODE_CONTROL_LED}} }},
-  { "alert",          { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
-                        {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
-                        {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}
+  { "busy",           { {WHITE,    {D5,CATHODE_CONTROL_LED}} }}, 
+  //                    {RED,      {D3,CATHODE_CONTROL_LED}} }},
+  { "camera",         { {YELLOW,   {D6,CATHODE_CONTROL_LED}} }},
+  { "microphone",     { {YELLOW,   {D7,CATHODE_CONTROL_LED}} }},
+  { "do-not-disturb", { {RED,      {D8,CATHODE_CONTROL_LED}} }}
+  //{ "alert",        { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
+  //                    {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
+  //                    {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}
 };
 
 enum BlinkingType { BLINKING_NORMAL, BLINKING_FAST, BLINKING_SLOW, BLINKING_OFF };
@@ -45,7 +51,7 @@ struct PanelStatus {
   PanelState state;
   String color;
   byte intensity;
-  ulong ttl;
+  ushort ttl;
 };
 
 struct GpioState {

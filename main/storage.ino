@@ -50,6 +50,7 @@ struct Settings {
   bool autoSleepEnabled;
   byte autoSleepHourStart;
   byte autoSleepHourEnd;
+  ushort defaultTTLInMinutes;
 
   bool isSet() {
     return this->setValue == EEPROM_SET;
@@ -69,7 +70,7 @@ Settings settings = {};
 void setupStorage() {
   loadDeviceInformation();
   loadWifiConfig();
-  loadSettings();
+  loadUserSettings();
 }
 
 void loadDeviceInformation() {
@@ -91,6 +92,29 @@ void loadDeviceInformation() {
   Serial.println(" sign-model: " + String(devInfo.signModel));
   Serial.println(" serial-number: " + String(devInfo.serialNumber));
   Serial.println(" manufacturing-date: " + String(devInfo.manufacturingDate));
+}
+
+String getDeviceInformation() {
+  DynamicJsonDocument doc(500);
+  doc["signModel"] = String(devInfo.signModel);
+  doc["serialNumber"] = String(devInfo.serialNumber);
+  doc["manufacturingDate"] = String(devInfo.manufacturingDate);
+  doc["boardModel"] = String(BOARD_MODEL);
+  doc["boardVersion"] = String(BOARD_VERSION);
+  doc["firmwareVersion"] = String(FW_MAJOR) + "." + String(FW_MINOR);
+  doc["timestamp"] = getEpochTime();
+  doc["uptime"] = getUptime();
+  doc["inputVoltage"] = ESP.getVcc()/1000.0;
+  DynamicJsonDocument memory(300); 
+  memory["freHeapSize"] = ESP.getMaxFreeBlockSize();
+  memory["heapFragmentation"] = ESP.getHeapFragmentation();
+  memory["sketchSize"] = ESP.getSketchSize();
+  memory["freeSketchSize"] = ESP.getFreeSketchSpace();
+  doc["memory"] = memory;
+
+  String message = "";
+  serializeJsonPretty(doc, message);
+  return message;
 }
 
 PostResult setDeviceInformation(String jsonBody) {
@@ -133,34 +157,18 @@ PostResult setDeviceInformation(String jsonBody) {
 
   Serial.println("Persisting config information on EEPROM");
 
-  Serial.println("Content to write:");
-  Serial.println(" signModel: " + String(devInfo.signModel));
-  Serial.println(" serialNumber: " + String(devInfo.serialNumber));
-  Serial.println(" manufacturingDate: " + String(devInfo.manufacturingDate));
+  Serial.println(" Content to write:");
+  Serial.println("  signModel: " + String(devInfo.signModel));
+  Serial.println("  serialNumber: " + String(devInfo.serialNumber));
+  Serial.println("  manufacturingDate: " + String(devInfo.manufacturingDate));
 
   EEPROM.begin(STORAGE_SIZE);
   EEPROM.put(DEVICE_INFO_POS, devInfo);
   EEPROM.end();
 
-  return POST_SUCCESS; 
-}
+  Serial.println("Done");
 
-String getDeviceInformation() {
-  String msg = "{ ";
-    msg += "\"signModel\": \"" + String(devInfo.signModel) + "\",";
-    msg += "\"serialNumber\": \"" + String(devInfo.serialNumber) + "\",";
-    msg += "\"manufacturingDate\": \"" + String(devInfo.manufacturingDate) + "\",";
-    msg += "\"boardModel\": \"" + String(ARDUINO_BOARD) + "\",";
-    msg += "\"firmwareVersion\": \"" + String(FW_MAJOR) + "." + String(FW_MINOR) + "\",";
-    msg += "\"inputVoltage\": \"" + String(ESP.getVcc()/1000.0) + "\",";
-    msg += "\"memory\": {";
-      msg += "\"freHeapSize\": \"" + String(ESP.getMaxFreeBlockSize()) + "\",";
-      msg += "\"heapFragmentation\": \"" + String(ESP.getHeapFragmentation()) + "\",";
-      msg += "\"sketchSize\": \"" + String(ESP.getSketchSize()) + "\",";
-      msg += "\"freeSketchSize\": \"" + String(ESP.getFreeSketchSpace()) + "\"";
-    msg += "}";
-  msg += "}";
-  return msg;
+  return POST_SUCCESS; 
 }
 
 void loadWifiConfig() {
@@ -181,6 +189,20 @@ void loadWifiConfig() {
   Serial.println(" psk: " + String(wifiConfig.psk));
 }
 
+String getWifiConfig() {
+  DynamicJsonDocument doc(500);
+  if (staConnectionFailed) {
+    doc["staConnectionFailed"] = true;
+  }
+  doc["mode"] = wifiConfig.modeAsString();
+  doc["ssid"] = String(wifiConfig.ssid);
+  doc["psk"] = String(wifiConfig.psk);
+
+  String message = "";
+  serializeJsonPretty(doc, message);
+  return message;
+}
+
 String getDefaultSSID() {
   // define default ssid using mac address
   String macAddr = WiFi.macAddress();
@@ -194,16 +216,17 @@ String getDefaultPsk() {
   return String(AP_PSK);
 }
 
-String getWifiConfig() {
-  String msg = "{ ";
-  if (staConnectionFailed) {
-    msg += "\"staConnectionFailed\": true,";
-  }
-  msg += "\"mode\": \"" + wifiConfig.modeAsString() + "\",";
-  msg += "\"ssid\": \"" + String(wifiConfig.ssid) + "\", ";
-  msg += "\"psk\": \"" + String(wifiConfig.psk) + "\" ";
-  msg += "}";
-  return msg;
+void setDefaultWifiConfig() {
+  wifiConfig.setValue = 0;
+  wifiConfig.mode = WIFI_AP;
+
+  String ssid = getDefaultSSID();
+  memset(wifiConfig.ssid, '\0', sizeof wifiConfig.ssid);
+  strcpy(wifiConfig.ssid, ssid.c_str());
+
+  memset(wifiConfig.psk, '\0', sizeof wifiConfig.psk);  
+  String psk = getDefaultPsk();
+  strcpy(wifiConfig.psk, psk.c_str());
 }
 
 PostResult setWifiConfig(String jsonBody) {
@@ -248,47 +271,23 @@ PostResult setWifiConfig(String mode, String ssid, String psk) {
   strcpy(wifiConfig.ssid, ssid.c_str());
   strcpy(wifiConfig.psk, psk.c_str());
 
-  Serial.println("Persisting config information on EEPROM");
+  Serial.println("Persisting config information on EEPROM...");
 
-  Serial.println("Content to write:");
-  Serial.println(" mode: " + wifiConfig.modeAsString());
-  Serial.println(" ssid: " + String(wifiConfig.ssid));
-  Serial.println(" psk: " + String(wifiConfig.psk));
+  Serial.println(" Content to write:");
+  Serial.println("  mode: " + wifiConfig.modeAsString());
+  Serial.println("  ssid: " + String(wifiConfig.ssid));
+  Serial.println("  psk: " + String(wifiConfig.psk));
 
   EEPROM.begin(STORAGE_SIZE);
   EEPROM.put(WIFI_CONFIG_POS, wifiConfig);
   EEPROM.end();
 
+  Serial.println("Done");
+
   return POST_SUCCESS;
 }
 
-void setDefaultWifiConfig() {
-  wifiConfig.setValue = 0;
-  wifiConfig.mode = WIFI_AP;
-
-  String ssid = getDefaultSSID();
-  memset(wifiConfig.ssid, '\0', sizeof wifiConfig.ssid);
-  strcpy(wifiConfig.ssid, ssid.c_str());
-
-  memset(wifiConfig.psk, '\0', sizeof wifiConfig.psk);  
-  String psk = getDefaultPsk();
-  strcpy(wifiConfig.psk, psk.c_str());
-}
-
-void factoryReset(bool fullReset) {
-  Serial.print("Clearing Wifi config " + String(fullReset ? "and device information " : "") + "on EEPROM...");
-  EEPROM.begin(STORAGE_SIZE);
-  for (int i=0; i < STORAGE_BLOCK; i++) {
-    // reset device information
-    if (fullReset) EEPROM.write(DEVICE_INFO_POS + i, 255);
-    // reset wifi config
-    EEPROM.write(WIFI_CONFIG_POS + i, 255);
-  }
-  EEPROM.end();
-  Serial.println("Done");
-}
-
-void loadSettings() {
+void loadUserSettings() {
   Serial.print("Reading user Settings from EEPROM...");
   EEPROM.begin(STORAGE_SIZE);
   EEPROM.get(SETTINGS_POS, settings);
@@ -299,19 +298,122 @@ void loadSettings() {
     settings.setValue = 0;
     settings.tzOffsetInMinutes = -3*60; // BR timezone
     settings.autoSleepEnabled = true;
-    settings.autoSleepHourStart = 20;
+    settings.autoSleepHourStart = 1;
     settings.autoSleepHourEnd = 7;
+    settings.defaultTTLInMinutes = 30;
   } else {
     Serial.println("Done");
   }
 
   Serial.println(" tz-offset: " + String(settings.tzOffsetInMinutes));
-  Serial.println(" auto-sleep: " + String(settings.autoSleepEnabled));
-  Serial.print(" auto-sleep: start=" + String(settings.autoSleepHourStart));
-  Serial.print("h, end=" + String(settings.autoSleepHourEnd));
-  Serial.println("h");
+  Serial.println(" auto-sleep: enabled=" + String(settings.autoSleepEnabled ? "true" : "false") + " start=" + String(settings.autoSleepHourStart) + "h, end=" + String(settings.autoSleepHourEnd) + "h");
+  Serial.println(" default TTL: " + String(settings.defaultTTLInMinutes));
+}
+
+String getUserSettings() {
+  DynamicJsonDocument doc(500);
+  doc["tzOffset"] = settings.tzOffsetInMinutes;
+  doc["defaultTTL"] = settings.defaultTTLInMinutes;
+  DynamicJsonDocument autoSleep(300); 
+  autoSleep["enabled"] = settings.autoSleepEnabled;
+  autoSleep["hourStart"] = settings.autoSleepHourStart;
+  autoSleep["hourEnd"] = settings.autoSleepHourEnd;
+  doc["autoSleep"] = autoSleep;
+
+  String message = "";
+  serializeJsonPretty(doc, message);
+  return message;
 }
 
 int getTzOffsetInSecods() {
   return settings.tzOffsetInMinutes * 60; // in seconds
+}
+
+long getDefaultTTL() {
+  return settings.defaultTTLInMinutes * 60; // in seconds
+}
+
+bool getAutoSleepHours(byte& hourStart, byte& hourEnd) {
+  if (settings.autoSleepEnabled) {
+    hourStart = settings.autoSleepHourStart;
+    hourEnd = settings.autoSleepHourEnd;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+PostResult setUserSettings(String jsonBody) {
+  if (jsonBody.isEmpty()) {
+    return BAD_REQUEST;
+  }
+  DynamicJsonDocument doc(250);
+  DeserializationError err = deserializeJson(doc, jsonBody);
+  if (err) {
+    Serial.print("Deserialization error: ");
+    Serial.println(err.f_str());
+    return BAD_REQUEST;  
+  }
+  JsonObject root = doc.as<JsonObject>();
+  if (!root.containsKey("autoSleep") && !root.containsKey("defaultTTL") && !root.containsKey("tzOffset")) {
+    Serial.println("missing fields: autoSleep, defaultTTL and tzOffset");
+    return BAD_REQUEST;
+  }
+  
+  Settings newSettings = settings;
+
+  if (root.containsKey("tzOffset")) {
+    newSettings.tzOffsetInMinutes = root["tzOffset"].as<int>();
+  }
+
+  if (root.containsKey("autoSleep")) {
+    JsonObject autoSleep = root["autoSleep"].as<JsonObject>();
+    if (autoSleep.containsKey("enabled") && autoSleep.containsKey("hourStart") && autoSleep.containsKey("hourEnd")) {
+      newSettings.autoSleepEnabled = autoSleep["enabled"].as<bool>();
+      newSettings.autoSleepHourStart = autoSleep["hourStart"].as<byte>();
+      newSettings.autoSleepHourEnd = autoSleep["hourEnd"].as<byte>();
+    } else {
+      Serial.println("missing autoSleep fields: enabled, hourStart, and hourEnd");
+      return BAD_REQUEST;
+    }
+  }
+
+  if (root.containsKey("defaultTTL")) {
+    newSettings.defaultTTLInMinutes = root["defaultTTL"].as<ushort>();
+  }
+
+  // persist on EEPROM
+
+  settings = newSettings;
+  settings.setValue = EEPROM_SET;
+
+  Serial.println("Persisting user settings on EEPROM");
+
+  Serial.println(" Content to write:");
+  Serial.println("  tz-offset: " + String(settings.tzOffsetInMinutes));
+  Serial.println("  auto-sleep: enabled=" + String(settings.autoSleepEnabled ? "true" : "false") + " start=" + String(settings.autoSleepHourStart) + "h, end=" + String(settings.autoSleepHourEnd) + "h");
+  Serial.println("  default TTL: " + String(settings.defaultTTLInMinutes));
+
+  EEPROM.begin(STORAGE_SIZE);
+  EEPROM.put(SETTINGS_POS, settings);
+  EEPROM.end();
+
+  Serial.println("Done");
+
+  return POST_SUCCESS;  
+}
+
+void factoryReset(bool fullReset) {
+  Serial.print("Clearing Wifi config, user settings" + String(fullReset ? ", and device information" : "") + " on EEPROM...");
+  EEPROM.begin(STORAGE_SIZE);
+  for (int i=0; i < STORAGE_BLOCK; i++) {
+    // reset device information
+    if (fullReset) EEPROM.write(DEVICE_INFO_POS + i, 255);
+    // reset wifi config
+    EEPROM.write(WIFI_CONFIG_POS + i, 255);
+    // reset user settings
+    EEPROM.write(SETTINGS_POS + i, 255);
+  }
+  EEPROM.end();
+  Serial.println("Done");
 }

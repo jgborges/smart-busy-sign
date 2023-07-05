@@ -14,9 +14,11 @@ void setupWebServer() {
   webServer.on(F("/status"), handleStatus);
   webServer.on(F("/admin/device"), handleAdminDevice);
   webServer.on(F("/admin/wifi"), handleAdminWifi);
+  webServer.on(F("/admin/settings"), handleAdminSettings);
   webServer.on(F("/admin/reboot"), HTTP_POST, handleAdminReboot);
   webServer.on(F("/admin/factory-reset"), HTTP_POST, handleAdminReset);
   webServer.onNotFound(handleNotFound);
+
   webServer.begin();
   Serial.println("HTTP web server started");
 }
@@ -141,6 +143,39 @@ void handleAdminWifi() {
         webServer.send(200, "text/html", "Wifi config updated successfully! Device will reboot now...");
         delay(5000);
         reboot();
+        break;
+      case BAD_REQUEST:
+        webServer.send(400, "text/plain", "bad request");
+        break;
+      case SERVER_ERROR:
+      default:
+        webServer.send(500, "text/plain", "unknown server error");
+        break;
+    }
+  }
+}
+
+void handleAdminSettings() {
+  if (webServer.method() == HTTP_GET) {
+    Serial.println("Handle GET /admin/settings");
+    String message = getUserSettings();
+    Serial.println("GET Response");
+    Serial.println(message);
+    webServer.send(200, "application/json", message);
+  } else {
+    Serial.println("Handle POST /admin/settings");
+    if (!webServer.hasArg("plain")) {
+      webServer.send(400, "application/json", "no body");
+      return;
+    }
+    String body = webServer.arg("plain");
+    Serial.println("Request body: " + body);
+
+    PostResult result = setUserSettings(body);
+
+    switch (result) {
+      case POST_SUCCESS:
+        webServer.send(200, "text/html", "user settings updated successfully!");
         break;
       case BAD_REQUEST:
         webServer.send(400, "text/plain", "bad request");

@@ -26,7 +26,7 @@ void setupGpio(const PanelSetup& setup) {
     }
   }
 
-  testLeds();
+  enablePanels();
   
   // initialize and configure blinking states
   int now = millis();
@@ -103,28 +103,39 @@ void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   }
 }
 
-void testLeds() {
+void enablePanels() {
   // turn all lights on, when initializing board, then off
   Serial.print("Enabling all panels...");
+  if (!isWakingFromDeepSleep()) {
+    turnAllLightsOn();
+    delay(3000); 
+  }
+  turnAllLightsOff();
+  Serial.println("done!"); 
+}
+
+void turnAllLightsOn() {
   for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {
       continue;
     }
     turnLightOn(gpio, 255);
   }
-  delay(3000); 
+}
+
+void turnAllLightsOff() {
   for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {
       continue;
     }
     turnLightOff(gpio);
   }
-  Serial.println("done!"); 
 }
 
 void handleBlinking() {
   ulong now = millis();
-  if ((now - lastBlinkCheck) < 100) { // we only check blink every 100 ms
+  long elapsed = (now - lastBlinkCheck);
+  if (elapsed < BLINK_CHECK_PERIOD_MS) {
     return;
   } else {
     lastBlinkCheck = now;
@@ -133,9 +144,9 @@ void handleBlinking() {
   for (int i=0; i < NumBlinkingTypes; i++) {
     BlinkingType blinkType = (BlinkingType)i;
     BlinkingState& blink = blinkingStates[i];
-    ulong elapsed = now - blink.lastStateChangeMillis;
+    long blinkElapsed = now - blink.lastStateChangeMillis;
     ulong interval = blink.isLightOn ? blink.intervalOn : blink.intervalOff;
-    bool trigger = elapsed > interval;
+    bool trigger = blinkElapsed > interval;
     if (trigger) {
       blink.isLightOn = !blink.isLightOn;
       for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
