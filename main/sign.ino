@@ -142,13 +142,13 @@ void applySignStatus(PanelStatus panel) {
   PanelState state = panel.state;
   byte intensity = panel.intensity;
 
-  Serial.println("Updating panel " + name + " to '" + panelStateToString(state) + "' state");
+  Serial.println("Updating panel '" + name + "' to '" + panelStateToString(state) + "' state");
   LedTypes firstLed = panelSetupMap.at(name).begin()->first;
   bool panelIsRGB = isLedRGB(firstLed);
   if (panelIsRGB) {
     int r, g, b;
     if (!colorToRGB(color, intensity, r, g, b)) {
-      Serial.println(" could not update to color " + color + ": unknown color");
+      Serial.println(" could not update to color '" + color + "': unknown color");
       return;
     }
     Serial.println(" set color RGB (" + String(r) + "," + String(g) + "," + String(b) + ")");
@@ -166,7 +166,7 @@ void applySignStatus(PanelStatus panel) {
     return;
   }
   if (!ColorToLed.count(color)) {
-    Serial.println(" could not find gpio for panel " + name);
+    Serial.println(" could not find gpio for panel '" + name + "'");
     return;
   }
 
@@ -186,6 +186,7 @@ String getSignStatus() {
   DynamicJsonDocument doc(2000);
   doc["timestamp"] = getEpochTime();
   doc["uptime"] = getUptime();
+  doc["inactiveTime"] = getInactiveTime();
   doc["signModel"] = SIGN_MODEL;
   doc["firmwareVersion"] = String(FW_MAJOR) + "." + String(FW_MINOR);
 
@@ -219,18 +220,18 @@ ParsingResult setSignStatus(String statusJson) {
   }
   JsonObject root = doc.as<JsonObject>();
   if (!root.containsKey("panels") || !root["panels"].is<JsonArray>()) {
-    Serial.println("missing panels field");
+    Serial.println("missing 'panels' field");
     return JSON_MISSING_PANELS_FIELD;
   }
   JsonArray panels = root["panels"].as<JsonArray>();
   Serial.println("Panels to update: " + String(panels.size()));
   for (JsonObject panel : panels) {
     if (!panel.containsKey("name") || panel["name"].as<String>().isEmpty()) {
-      Serial.println("missing name field");
+      Serial.println("missing 'name' field");
       return JSON_MISSING_NAME_FIELD;
     }
     if (!panel.containsKey("state")) {
-      Serial.println("missing color or state field");
+      Serial.println("missing 'color' or 'state' field");
       return JSON_MISSING_STATE_FIELD;
     }
     String name = panel["name"];
@@ -258,7 +259,7 @@ void setPanelStatus(String name, String state, String color, String intensity, u
       panel.intensity = getIntensityByte(intensity);
     }
     if (isPanelOn(panel.state)) {
-      panel.ttl = ttl > 0 ? ttl : getDefaultTTL();
+      panel.ttl = ttl > 0 ? ttl : getAutoTurnOffPeriod();
     } else {
       panel.ttl = 0;
     }
@@ -266,7 +267,7 @@ void setPanelStatus(String name, String state, String color, String intensity, u
     applySignStatus(panel);
     return;
   }
-  Serial.println("Panel does not exists! " + name + " | " + color);
+  Serial.println("Panel does not exists! '" + name + "' | " + color);
 }
 
 byte getIntensityByte(String value) {

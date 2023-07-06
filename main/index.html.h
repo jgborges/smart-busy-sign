@@ -79,8 +79,8 @@ const char *indexHtml = R"====(
         <tr>
           <td><label>WiFi Mode</label></td>
           <td>
-            <input type="radio" id="sta" name="mode" value="sta"> <label for="sta">WiFi Client (recommended)</label><br>
-            <input type="radio" id="ap" name="mode" value="ap"> <label for="ap">Access Point</label><br>
+            <input type="radio" id="sta" name="wifiMode" value="sta"> <label for="sta">WiFi Client (recommended)</label><br>
+            <input type="radio" id="ap" name="wifiMode" value="ap"> <label for="ap">Access Point</label><br>
           </td>
         </tr>
         <tr>
@@ -95,8 +95,45 @@ const char *indexHtml = R"====(
           </td>
         </tr>
       </table>
-      <input type="submit" name="action" value="Submit"><br>
+      <input id="wifi-submit" type="submit" name="action" value="Submit"><br>
       <span style="font-size:small; font-style:italic;">Device will reboot after WiFi configuration changes. If client mode fails </br>to connect, it will start again in Access Point (AP) mode (default settings)</span>
+    </form>
+    <h1>Settings</h1>
+    <h4><span id="settings-warn" style="background-color: yellow;"></span></h4>
+    <form id="settings">
+      <table><tbody>
+        <tr>
+          <td><label for="tzOffset">Timezone</label></td>
+          <td>
+            <input style="font-family:monospace" type="text" id="tzOffset" name="tzOffset" value="" size="6"> minutes<br>
+            <span id="clock" style="font-size:small"></span>
+          </td>
+        </tr>
+        <tr>
+          <td><label for="autoTurnOffPeriod">Automatic panel turn-off</label></td>
+          <td><input style="font-family:monospace" type="text" id="autoTurnOffPeriod" name="autoTurnOffPeriod" value="" size="6"> minutes</td>
+        </tr>
+        <tr>
+          <td><label for="autoSleep">Automatic sleep</label></td>
+          <td>
+            <input type="checkbox" id="autoSleepEnabled" name="autoSleepEnabled">Auto sleep enabled<br>
+            <input style="font-family:monospace" type="text" id="autoSleepPeriod" name="autoSleepPeriod" value="" size="6"> minutes<br>
+            Prevent sleep between 
+            <input style="font-family:monospace" type="text" id="autoSleepActiveHourStart" name="autoSleepActiveHourStart" value="" maxlength="2" size="4"> and 
+            <input style="font-family:monospace" type="text" id="autoSleepActiveHourEnd" name="autoSleepActiveHourEnd" value="" maxlength="2" size="4"> hours of the days<br>
+            <span style="font-size:small">
+              <input type="checkbox" id="monday" name="monday">Mon
+              <input type="checkbox" id="tuesday" name="tuesday">Tue
+              <input type="checkbox" id="wednesday" name="wednesday">Wed
+              <input type="checkbox" id="thursday" name="thursday">Thu
+              <input type="checkbox" id="friday" name="friday">Fri
+              <input type="checkbox" id="saturday" name="saturday">Sat
+              <input type="checkbox" id="sunday" name="sunday">Sun
+            </span>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" name="action" value="Submit"><br>
     </form>
     <h1>Tools</h1>
     <form>
@@ -116,8 +153,10 @@ const char *indexHtml = R"====(
       loadStatus();
       loadDeviceInfo();
       loadWifiConfig();
+      loadUserSettings();
 
-      document.querySelector("#wifi").addEventListener("submit", updateWifi);
+      document.querySelector("#wifi").addEventListener("submit", updateWifiConfig);
+      document.querySelector("#settings").addEventListener("submit", updateUserSettings);
     }
 
     function togglePassword() {
@@ -151,6 +190,7 @@ const char *indexHtml = R"====(
           <td><span title="${p.intensity}">${intensityPercentage}</span></td>`;
         tbody.appendChild(tr);
       });
+      document.getElementById('clock').textContent = new Date(data.timestamp*1000).toISOString();
       console.info("Sign status loaded!");
     }
 
@@ -175,7 +215,7 @@ const char *indexHtml = R"====(
     }
 
     async function loadWifiConfig() {
-      console.info("Fetching Wifi Settings...");
+      console.info("Fetching Wifi Configuration...");
       const response = await fetch('/admin/wifi', {
         method: 'GET',
         headers: { 
@@ -185,7 +225,7 @@ const char *indexHtml = R"====(
 
       const data = await response.json(); // read response body as json
 
-      document.getElementById(data.mode).checked = true;
+      document.getElementById(data.mode).checked = true; // data.mode will be sta or ap
       document.getElementById('ssid').value = data.ssid;
       document.getElementById('psk').value = data.psk;
 
@@ -195,12 +235,45 @@ const char *indexHtml = R"====(
       console.info("Wifi Settings loaded!");
     }
 
-    async function updateWifi(e) {
+    async function loadUserSettings() {
+      console.info("Fetching User Settings...");
+      const response = await fetch('/admin/settings', {
+        method: 'GET',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json(); // read response body as json
+
+      document.getElementById('tzOffset').value = data.tzOffset; // data.mode will be sta or ap
+      document.getElementById('autoTurnOffPeriod').value = data.autoTurnOffPeriod;
+      document.getElementById('autoSleepEnabled').checked = data.autoSleep?.enabled === true;
+      document.getElementById('autoSleepPeriod').value = data.autoSleep?.period;
+      document.getElementById('autoSleepActiveHourStart').value = data.autoSleep?.activeHourStart;
+      document.getElementById('autoSleepActiveHourEnd').value = data.autoSleep?.activeHourEnd;
+
+      const daysOfWeek = [ 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday' ];
+
+      for (const day of daysOfWeek) {
+        if (data.autoSleep?.activeDaysOfWeek?.includes(day)) {
+          document.getElementById(day).checked = true;
+        }
+      }
+
+      console.info("User Settings loaded!");
+    }
+
+    async function updateWifiConfig(e) {
       e.preventDefault();
 
-      const mode = document.querySelector('#wifi > input[name="mode"]:checked').value;
+      const mode = document.querySelector('input[name="wifiMode"]:checked')?.value;
       const ssid = document.getElementById('ssid').value?.trim();
       const psk = document.getElementById('psk').value;
+      if (!mode) {
+        alert('Please select a WiFi mode (Client or AP)');
+        return;
+      }
       if (!ssid || ssid.length > 32) {
         alert('SSID cannot be empty or larger than 32 characters');
         return;
@@ -213,9 +286,39 @@ const char *indexHtml = R"====(
       const response = await post('/admin/wifi', { mode, ssid, psk });
 
       if (response.ok) {
-        document.getElementById("wifi-warn").textContent = "Successfully updated WiFi settings! Device will reboot";
+        document.getElementById("wifi-warn").textContent = "Successfully updated WiFi configuration! Device will reboot";
       } else {
-        document.getElementById("wifi-warn").textContent = "Failed to update WiFi settings!";
+        document.getElementById("wifi-warn").textContent = "Failed to update WiFi configuration!";
+      }
+    }
+
+    async function updateUserSettings(e) {
+      e.preventDefault();
+
+      const tzOffset = document.getElementById('tzOffset').value?.trim();
+      const autoTurnOffPeriod = document.getElementById('autoTurnOffPeriod').value?.trim();
+
+      const body = {};
+      if (!tzOffset || +tzOffset < (-11*60) || +tzOffset > (11*60)) {
+        alert('Please select a timezone between -11h and +11h');
+        return;
+      } else {
+        body.tzOffset = +tzOffset;
+      }
+
+      if (!autoTurnOffPeriod || +autoTurnOffPeriod <= 0 || +autoTurnOffPeriod > (24*60)) {
+        alert('Please select a value for auto turn-off between 1 min and 1440 min (24h)');
+        return;
+      } else {
+        body.autoTurnOffPeriod = +autoTurnOffPeriod;
+      }
+
+      const response = await post('/admin/settings', body);
+
+      if (response.ok) {
+        document.getElementById("settings-warn").textContent = "Successfully updated settings! Device will reboot";
+      } else {
+        document.getElementById("settings-warn").textContent = "Failed to update settings!";
       }
     }
 

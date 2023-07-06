@@ -5,57 +5,10 @@
 #define AP_PSK "smartsign"
 #endif
 
-#define EEPROM_SET 42 // magig number to differentiate random bits from actual values written in EEPROM
-
-// permanent sign information
-struct DeviceInfo {
-  byte setValue;
-  char signModel[36];
-  char serialNumber[26];
-  char manufacturingDate[26];
-
-  bool isSet() {
-    return this->setValue == EEPROM_SET;
-  }
-};
-
-// wifi connection information
-struct WifiConfig {
-  byte setValue;
-  WiFiMode_t mode;
-  char ssid[33]; // ssd can be 32 char at most
-  char psk[63];  // psk can be 62 char at most
-
-  bool isWifiSet() {
-    return this->setValue == EEPROM_SET;
-  }
-
-  String modeAsString() {
-    if (this->mode == WIFI_STA) {
-      return "sta";
-    } else if (this->mode == WIFI_AP) {
-      return "ap";
-    }else if (this->mode == WIFI_OFF) {
-      return "off";
-    } else {
-      return "unknown";
-    }
-  }
-};
-
-// User settings
-struct Settings {
-  byte setValue;
-  int tzOffsetInMinutes;
-  bool autoSleepEnabled;
-  byte autoSleepHourStart;
-  byte autoSleepHourEnd;
-  ushort defaultTTLInMinutes;
-
-  bool isSet() {
-    return this->setValue == EEPROM_SET;
-  }
-};
+#define BR_TIMEZONE -3*60
+#define MAX_TZ_OFFSET 11*60
+#define MIN_TZ_OFFSET -11*60
+#define MAX_AUTO_TURNOFF_PERIOD (ushort)(24*60)
 
 DeviceInfo devInfo = {};
 WifiConfig wifiConfig = {};
@@ -104,6 +57,7 @@ String getDeviceInformation() {
   doc["firmwareVersion"] = String(FW_MAJOR) + "." + String(FW_MINOR);
   doc["timestamp"] = getEpochTime();
   doc["uptime"] = getUptime();
+  doc["inactiveTime"] = getInactiveTime();
   doc["inputVoltage"] = ESP.getVcc()/1000.0;
   DynamicJsonDocument memory(300); 
   memory["freHeapSize"] = ESP.getMaxFreeBlockSize();
@@ -130,7 +84,7 @@ PostResult setDeviceInformation(String jsonBody) {
   }
   JsonObject root = doc.as<JsonObject>();
   if (!root.containsKey("signModel") || !root.containsKey("serialNumber") || !root.containsKey("manufacturingDate")) {
-    Serial.println("missing one of the mandatory fields: signModel, serialNumber, manufacturingDate");
+    Serial.println("missing one of the mandatory fields: 'signModel', 'serialNumber', 'manufacturingDate'");
     return BAD_REQUEST;
   }
   String signModel = root["signModel"];
@@ -138,37 +92,41 @@ PostResult setDeviceInformation(String jsonBody) {
   String manufacturingDate = root["manufacturingDate"];
 
   if (signModel.isEmpty() || signModel.length() < 5) {
-    Serial.println("signModel field should have at least 5 characters");
+    Serial.println("'signModel' field should have at least 5 characters");
     return BAD_REQUEST;
   }
   if (serialNumber.isEmpty() || serialNumber.length() < 5) {
-    Serial.println("serialNumber field should have at least 5 characters");
+    Serial.println("'serialNumber' field should have at least 5 characters");
     return BAD_REQUEST;
   }
   if (manufacturingDate.isEmpty() || manufacturingDate.length() < 10) {
-    Serial.println("manufacturingDate field should have at least 100 characters and preferably in the YYYY/MM/DD format");
+    Serial.println("'manufacturingDate' field should have at least 100 characters and preferably in the YYYY/MM/DD format");
     return BAD_REQUEST;
   }
 
-  devInfo.setValue = EEPROM_SET;
-  strcpy(devInfo.signModel, signModel.c_str());
-  strcpy(devInfo.serialNumber, serialNumber.c_str());
-  strcpy(devInfo.manufacturingDate, manufacturingDate.c_str());
+  DeviceInfo newDevInfo;
+  strcpy(newDevInfo.signModel, signModel.c_str());
+  strcpy(newDevInfo.serialNumber, serialNumber.c_str());
+  strcpy(newDevInfo.manufacturingDate, manufacturingDate.c_str());
 
+  persistDeviceInformation(newDevInfo);
+  devInfo = newDevInfo;
+
+  return POST_SUCCESS; 
+}
+
+void persistDeviceInformation(DeviceInfo& newDevInfo) {
   Serial.println("Persisting config information on EEPROM");
+  Serial.println(" signModel: " + String(newDevInfo.signModel));
+  Serial.println(" serialNumber: " + String(newDevInfo.serialNumber));
+  Serial.println(" manufacturingDate: " + String(newDevInfo.manufacturingDate));
 
-  Serial.println(" Content to write:");
-  Serial.println("  signModel: " + String(devInfo.signModel));
-  Serial.println("  serialNumber: " + String(devInfo.serialNumber));
-  Serial.println("  manufacturingDate: " + String(devInfo.manufacturingDate));
-
+  newDevInfo.setValue = EEPROM_SET;
   EEPROM.begin(STORAGE_SIZE);
-  EEPROM.put(DEVICE_INFO_POS, devInfo);
+  EEPROM.put(DEVICE_INFO_POS, newDevInfo);
   EEPROM.end();
 
   Serial.println("Done");
-
-  return POST_SUCCESS; 
 }
 
 void loadWifiConfig() {
@@ -242,7 +200,7 @@ PostResult setWifiConfig(String jsonBody) {
   }
   JsonObject root = doc.as<JsonObject>();
   if (!root.containsKey("mode") || !root.containsKey("ssid")) {
-    Serial.println("missing mode or ssid fields");
+    Serial.println("missing 'mode' or 'ssid' fields");
     return BAD_REQUEST;
   }
   String mode = root["mode"];
@@ -265,26 +223,30 @@ PostResult setWifiConfig(String mode, String ssid, String psk) {
     return BAD_REQUEST;
   }
 
-  wifiConfig.setValue = EEPROM_SET;
-  wifiConfig.mode = isAP ?  WIFI_AP :
+  WifiConfig newWifiConfig;
+  newWifiConfig.mode = isAP ?  WIFI_AP :
                     isSTA ? WIFI_STA : WIFI_OFF;
-  strcpy(wifiConfig.ssid, ssid.c_str());
-  strcpy(wifiConfig.psk, psk.c_str());
+  strcpy(newWifiConfig.ssid, ssid.c_str());
+  strcpy(newWifiConfig.psk, psk.c_str());
 
+  persistWifiConfig(newWifiConfig);
+  wifiConfig = newWifiConfig;
+
+  return POST_SUCCESS;
+}
+
+void persistWifiConfig(WifiConfig& newWifiConfig) {
   Serial.println("Persisting config information on EEPROM...");
+  Serial.println(" mode: " + newWifiConfig.modeAsString());
+  Serial.println(" ssid: " + String(newWifiConfig.ssid));
+  Serial.println(" psk: " + String(newWifiConfig.psk));
 
-  Serial.println(" Content to write:");
-  Serial.println("  mode: " + wifiConfig.modeAsString());
-  Serial.println("  ssid: " + String(wifiConfig.ssid));
-  Serial.println("  psk: " + String(wifiConfig.psk));
-
+  newWifiConfig.setValue = EEPROM_SET;
   EEPROM.begin(STORAGE_SIZE);
-  EEPROM.put(WIFI_CONFIG_POS, wifiConfig);
+  EEPROM.put(WIFI_CONFIG_POS, newWifiConfig);
   EEPROM.end();
 
   Serial.println("Done");
-
-  return POST_SUCCESS;
 }
 
 void loadUserSettings() {
@@ -296,28 +258,37 @@ void loadUserSettings() {
   if (!settings.isSet()) {
     Serial.println("Failed. Using default");
     settings.setValue = 0;
-    settings.tzOffsetInMinutes = -3*60; // BR timezone
-    settings.autoSleepEnabled = true;
-    settings.autoSleepHourStart = 1;
-    settings.autoSleepHourEnd = 7;
-    settings.defaultTTLInMinutes = 30;
+    settings.tzOffsetInMinutes = BR_TIMEZONE;
+    settings.autoTurnOffPeriod = 30;
+    settings.autoSleep = { true, 15, 8, 20, WEEKDAY };
   } else {
+    // validate fields
+    settings.tzOffsetInMinutes = std::min(std::max(settings.tzOffsetInMinutes, MIN_TZ_OFFSET), MAX_TZ_OFFSET);
+    settings.autoTurnOffPeriod = std::min(settings.autoTurnOffPeriod, MAX_AUTO_TURNOFF_PERIOD);
+    settings.autoSleep.activeHourStart %= 24;
+    settings.autoSleep.activeHourEnd %= 24;
     Serial.println("Done");
   }
 
-  Serial.println(" tz-offset: " + String(settings.tzOffsetInMinutes));
-  Serial.println(" auto-sleep: enabled=" + String(settings.autoSleepEnabled ? "true" : "false") + " start=" + String(settings.autoSleepHourStart) + "h, end=" + String(settings.autoSleepHourEnd) + "h");
-  Serial.println(" default TTL: " + String(settings.defaultTTLInMinutes));
+  Serial.println(" tz-offset: " + String(settings.tzOffsetInMinutes) + "min");
+  Serial.println(" auto-turnoff period: " + String(settings.autoTurnOffPeriod) + "min");
+  Serial.println(" auto-sleep: enabled=" + String(settings.autoSleep.enabled ? "true" : "false") + ", period=" + String(settings.autoSleep.period) + "min");
+  Serial.println(" auto-sleep active time: start=" + String(settings.autoSleep.activeHourStart) + "h, end=" + String(settings.autoSleep.activeHourEnd) + "h, days=" + dayOfWeekToString(settings.autoSleep.activeDaysOfWeek));
 }
 
 String getUserSettings() {
   DynamicJsonDocument doc(500);
   doc["tzOffset"] = settings.tzOffsetInMinutes;
-  doc["defaultTTL"] = settings.defaultTTLInMinutes;
+  doc["autoTurnOffPeriod"] = settings.autoTurnOffPeriod;
   DynamicJsonDocument autoSleep(300); 
-  autoSleep["enabled"] = settings.autoSleepEnabled;
-  autoSleep["hourStart"] = settings.autoSleepHourStart;
-  autoSleep["hourEnd"] = settings.autoSleepHourEnd;
+  autoSleep["enabled"] = settings.autoSleep.enabled;
+  autoSleep["period"] = settings.autoSleep.period;
+  autoSleep["activeHourStart"] = settings.autoSleep.activeHourStart;
+  autoSleep["activeHourEnd"] = settings.autoSleep.activeHourEnd;
+  //JsonArray days = autoSleep.createNestedArray("activeDaysOfWeek");
+  //for (auto& d : settings.autoSleep.getActiveDaysOfWeek()) {
+  //  days.add((int)d);
+  //}
   doc["autoSleep"] = autoSleep;
 
   String message = "";
@@ -329,18 +300,8 @@ int getTzOffsetInSecods() {
   return settings.tzOffsetInMinutes * 60; // in seconds
 }
 
-long getDefaultTTL() {
-  return settings.defaultTTLInMinutes * 60; // in seconds
-}
-
-bool getAutoSleepHours(byte& hourStart, byte& hourEnd) {
-  if (settings.autoSleepEnabled) {
-    hourStart = settings.autoSleepHourStart;
-    hourEnd = settings.autoSleepHourEnd;
-    return true;
-  } else {
-    return false;
-  }
+long getAutoTurnOffPeriod() {
+  return settings.autoTurnOffPeriod * 60; // in seconds
 }
 
 PostResult setUserSettings(String jsonBody) {
@@ -355,52 +316,55 @@ PostResult setUserSettings(String jsonBody) {
     return BAD_REQUEST;  
   }
   JsonObject root = doc.as<JsonObject>();
-  if (!root.containsKey("autoSleep") && !root.containsKey("defaultTTL") && !root.containsKey("tzOffset")) {
-    Serial.println("missing fields: autoSleep, defaultTTL and tzOffset");
+  if (!root.containsKey("autoSleep") && !root.containsKey("autoTurnOffPeriod") && !root.containsKey("tzOffset")) {
+    Serial.println("missing fields: 'autoSleep', 'autoTurnOffPeriod' and 'tzOffset'");
     return BAD_REQUEST;
   }
   
   Settings newSettings = settings;
 
   if (root.containsKey("tzOffset")) {
-    newSettings.tzOffsetInMinutes = root["tzOffset"].as<int>();
+    newSettings.tzOffsetInMinutes = std::min(std::max(root["tzOffset"].as<int>(), MIN_TZ_OFFSET), MAX_TZ_OFFSET);
   }
-
+  if (root.containsKey("autoTurnOffPeriod")) {
+    newSettings.autoTurnOffPeriod = std::min(root["autoTurnOffPeriod"].as<ushort>(), MAX_AUTO_TURNOFF_PERIOD);
+  }
   if (root.containsKey("autoSleep")) {
     JsonObject autoSleep = root["autoSleep"].as<JsonObject>();
-    if (autoSleep.containsKey("enabled") && autoSleep.containsKey("hourStart") && autoSleep.containsKey("hourEnd")) {
-      newSettings.autoSleepEnabled = autoSleep["enabled"].as<bool>();
-      newSettings.autoSleepHourStart = autoSleep["hourStart"].as<byte>();
-      newSettings.autoSleepHourEnd = autoSleep["hourEnd"].as<byte>();
+    if (autoSleep.containsKey("enabled") && autoSleep.containsKey("activeHourStart") && autoSleep.containsKey("activeHourEnd")) {
+      newSettings.autoSleep.enabled = autoSleep["enabled"].as<bool>();
+      newSettings.autoSleep.period = autoSleep["period"].as<ushort>();
+      newSettings.autoSleep.activeHourStart = autoSleep["activeHourStart"].as<byte>() % 24;
+      newSettings.autoSleep.activeHourEnd = autoSleep["activeHourEnd"].as<byte>() % 24;
+      //newSettings.autoSleep.activeDaysOfWeek = autoSleep["daysOfWeek"].as<JsonArray>();
     } else {
-      Serial.println("missing autoSleep fields: enabled, hourStart, and hourEnd");
+      Serial.println("missing any of the autoSleep fields: 'enabled', 'period', 'activeHourStart', and 'activeHourEnd'");
       return BAD_REQUEST;
     }
   }
 
-  if (root.containsKey("defaultTTL")) {
-    newSettings.defaultTTLInMinutes = root["defaultTTL"].as<ushort>();
-  }
-
   // persist on EEPROM
-
+  persistUserSettings(newSettings);
   settings = newSettings;
-  settings.setValue = EEPROM_SET;
+  setTzOffset(settings.tzOffsetInMinutes);
 
+  return POST_SUCCESS;  
+}
+
+void persistUserSettings(Settings& conf) {
+  // persist on EEPROM
   Serial.println("Persisting user settings on EEPROM");
+  Serial.println(" tz-offset: " + String(conf.tzOffsetInMinutes) + "min");
+  Serial.println(" auto-turnoff period: " + String(conf.autoTurnOffPeriod) + "min");
+  Serial.println(" auto-sleep: enabled=" + String(conf.autoSleep.enabled ? "true" : "false") + ", period=" + String(conf.autoSleep.period) + "min");
+  Serial.println(" auto-sleep active time: start=" + String(conf.autoSleep.activeHourStart) + "h, end=" + String(conf.autoSleep.activeHourEnd) + "h, days=" + dayOfWeekToString(conf.autoSleep.activeDaysOfWeek));
 
-  Serial.println(" Content to write:");
-  Serial.println("  tz-offset: " + String(settings.tzOffsetInMinutes));
-  Serial.println("  auto-sleep: enabled=" + String(settings.autoSleepEnabled ? "true" : "false") + " start=" + String(settings.autoSleepHourStart) + "h, end=" + String(settings.autoSleepHourEnd) + "h");
-  Serial.println("  default TTL: " + String(settings.defaultTTLInMinutes));
-
+  conf.setValue = EEPROM_SET;
   EEPROM.begin(STORAGE_SIZE);
-  EEPROM.put(SETTINGS_POS, settings);
+  EEPROM.put(SETTINGS_POS, conf);
   EEPROM.end();
 
   Serial.println("Done");
-
-  return POST_SUCCESS;  
 }
 
 void factoryReset(bool fullReset) {

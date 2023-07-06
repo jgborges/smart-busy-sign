@@ -132,6 +132,17 @@ void turnAllLightsOff() {
   }
 }
 
+bool isAllLightsOff() {
+  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+    if (gpioStates[gpio].state == PANEL_DISABLED) {
+      continue;
+    } else if (gpioStates[gpio].state != PANEL_OFF) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void handleBlinking() {
   ulong now = millis();
   long elapsed = (now - lastBlinkCheck);

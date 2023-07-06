@@ -1,5 +1,6 @@
 #include <map>
 #include <array>
+#include <vector>
 
 #define DEBUG_FAUXMO Serial
 
@@ -9,6 +10,8 @@
 #define BLINK_CHECK_PERIOD_MS 100   // every 100 ms
 #define TTL_CHECK_PERIOD_MS   5000  // every 5 seconds
 #define SLEEP_CHECK_PERIOD_MS 60000 // every 1 minute
+
+#define EEPROM_SET 42 // magic number to differentiate random bits from actual values written in EEPROM
 
 enum LedTypes {
   WHITE, YELLOW, RED, GREEN, BLUE, RGB_RED, RGB_GREEN, RGB_BLUE 
@@ -97,3 +100,90 @@ enum PostResult {
   SERVER_ERROR
 };
 
+// permanent sign information
+struct DeviceInfo {
+  char signModel[36];
+  char serialNumber[26];
+  char manufacturingDate[26];
+  byte setValue; // make it last field so any change will invalidate the whole struct
+
+  bool isSet() {
+    return this->setValue == EEPROM_SET;
+  }
+};
+
+// wifi connection information
+struct WifiConfig {
+  WiFiMode_t mode;
+  char ssid[33]; // ssd can be 32 char at most
+  char psk[63];  // psk can be 62 char at most
+  byte setValue; // make it last field so any change will invalidate the whole struct
+
+  bool isWifiSet() {
+    return this->setValue == EEPROM_SET;
+  }
+
+  String modeAsString() {
+    if (this->mode == WIFI_STA) {
+      return "sta";
+    } else if (this->mode == WIFI_AP) {
+      return "ap";
+    }else if (this->mode == WIFI_OFF) {
+      return "off";
+    } else {
+      return "unknown";
+    }
+  }
+};
+
+// User settings
+enum DayOfWeek : byte { 
+  NONE=0,
+  SUNDAY=1, MONDAY=2, TUESDAY=4, WEDNESDAY=8, THURSDAY=16, FRIDAY=32, SATURDAY=64, 
+  WEEKDAY=MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY, 
+  WEEKEND=SATURDAY|SUNDAY, 
+  ALL_DAYS=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY,
+};
+
+const std::array AllDaysOfWeek = { SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY };
+
+struct AutoSleepSettings {
+  bool enabled;
+  ushort period;
+  byte activeHourStart;
+  byte activeHourEnd;
+  DayOfWeek activeDaysOfWeek; // coded as bits in a byte
+
+  std::vector<DayOfWeek> getActiveDaysOfWeek() {
+    std::vector<DayOfWeek> out;
+    
+    for (int i=0; AllDaysOfWeek.size(); i++) {
+      if ((this->activeDaysOfWeek & AllDaysOfWeek[i]) > 0) {
+        out.push_back(AllDaysOfWeek[i]);
+      }
+    }
+    return out;
+  }
+
+  void setActiveDaysOfWeek(std::vector<DayOfWeek> days) {
+    this->activeDaysOfWeek = NONE;
+    for(int i = 0; i < days.size(); i++) {
+      DayOfWeek d = days[i];
+      if (d == NONE || d == WEEKDAY || d == WEEKEND || d == ALL_DAYS) {
+        continue;
+      }
+      this->activeDaysOfWeek = (DayOfWeek)(this->activeDaysOfWeek | d);
+    }
+  }
+};
+
+struct Settings {
+  int tzOffsetInMinutes;
+  ushort autoTurnOffPeriod;
+  AutoSleepSettings autoSleep;
+  byte setValue; // make it last field so any change will invalidate the whole struct
+
+  bool isSet() {
+    return this->setValue == EEPROM_SET;
+  }
+};
