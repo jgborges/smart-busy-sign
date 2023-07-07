@@ -157,7 +157,7 @@ struct AutoSleepSettings {
   std::vector<DayOfWeek> getActiveDaysOfWeek() {
     std::vector<DayOfWeek> out;
     
-    for (int i=0; AllDaysOfWeek.size(); i++) {
+    for (int i=0; i < AllDaysOfWeek.size(); i++) {
       if ((this->activeDaysOfWeek & AllDaysOfWeek[i]) > 0) {
         out.push_back(AllDaysOfWeek[i]);
       }
@@ -166,14 +166,15 @@ struct AutoSleepSettings {
   }
 
   void setActiveDaysOfWeek(std::vector<DayOfWeek> days) {
-    this->activeDaysOfWeek = NONE;
+    byte newValue = 0;
     for(int i = 0; i < days.size(); i++) {
       DayOfWeek d = days[i];
       if (d == NONE || d == WEEKDAY || d == WEEKEND || d == ALL_DAYS) {
         continue;
       }
-      this->activeDaysOfWeek = (DayOfWeek)(this->activeDaysOfWeek | d);
+      newValue = (byte)(newValue | (byte)d);
     }
+    this->activeDaysOfWeek = (DayOfWeek)newValue;
   }
 };
 

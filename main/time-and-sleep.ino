@@ -162,17 +162,18 @@ void handleAutoSleep(bool print) {
     sleepTimeInHours = (24-hcur) + (isNextDayActive ? hstart : 24);
   }
 
-  ulong sleepTimeInMinutes = std::min(sleepTimeInHours*60, (ulong)MAX_DEEP_SLEEP_IN_MINUTES);
-  Serial.println("Entering deep sleep for " + String(sleepTimeInMinutes) + " minutes");
-
   turnAllLightsOff();
-  ulong sleepTimeInMicroSeconds = sleepTimeInMinutes*60*1000*1000; // in microseconds
-  deepSleep(sleepTimeInMicroSeconds);
+
+  deepSleep(sleepTimeInHours*60);
 }
 
-void deepSleep(ulong timeToSleep) {
+void deepSleep(ulong sleepTimeInMinutes) {
+  ulong validSleepTimeInMinutes = std::min(sleepTimeInMinutes, (ulong)MAX_DEEP_SLEEP_IN_MINUTES);
+  Serial.println("Entering deep sleep for " + String(sleepTimeInMinutes) + " minutes");
+
   digitalWrite(D0, LOW);
-  ESP.deepSleep(timeToSleep);
+  ulong sleepTimeInMicroSeconds = validSleepTimeInMinutes*60*1000*1000; // in microseconds
+  ESP.deepSleep(sleepTimeInMicroSeconds);
 }
 
 void lightSleep() {
@@ -250,5 +251,26 @@ String dayOfWeekToString(DayOfWeek day) {
         }
       }
       return out;
+  }
+}
+
+DayOfWeek stringToDayOfWeek(String day) {
+  day.toLowerCase();
+  if (day.equals("sunday")) {
+    return SUNDAY;
+  } else if (day.equals("monday")) {
+    return MONDAY;
+  } else if (day.equals("tuesday")) {
+    return TUESDAY;
+  } else if (day.equals("wednesday")) {
+    return WEDNESDAY;
+  } else if (day.equals("thursday")) {
+    return THURSDAY;
+  } else if (day.equals("friday")) {
+    return FRIDAY;
+  } else if (day.equals("saturday")) {
+    return SATURDAY;
+  } else {
+    return NONE;
   }
 }

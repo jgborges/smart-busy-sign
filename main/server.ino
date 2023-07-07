@@ -16,6 +16,7 @@ void setupWebServer() {
   webServer.on(F("/admin/wifi"), handleAdminWifi);
   webServer.on(F("/admin/settings"), handleAdminSettings);
   webServer.on(F("/admin/reboot"), HTTP_POST, handleAdminReboot);
+  webServer.on(F("/admin/sleep"), HTTP_POST, handleAdminSleep);
   webServer.on(F("/admin/factory-reset"), HTTP_POST, handleAdminReset);
   webServer.onNotFound(handleNotFound);
 
@@ -189,10 +190,30 @@ void handleAdminSettings() {
 }
 
 void handleAdminReboot() {
-  Serial.println("Handle /admin/reboot");
+  Serial.println("Handle POST /admin/reboot");
   webServer.send(200, "text/plain", "rebooting device...\n\n");
   delay(2000);
   reboot();
+}
+
+void handleAdminSleep() {
+  Serial.println("Handle POST /admin/sleep");
+
+  long sleepTimeInMinutes = 0;
+  if (webServer.hasArg("plain")) {
+    String body = webServer.arg("plain");
+    Serial.println("Request body: " + body);
+
+    bool valid = parseJsonIntField(body, "value", sleepTimeInMinutes);
+    if (!valid) {
+      webServer.send(400, "text/plain", "bad request");
+      return;
+    }
+  }
+
+  webServer.send(200, "text/plain", "sleeping device...\n\n");
+  delay(2000);
+  deepSleep(sleepTimeInMinutes);
 }
 
 void handleAdminReset() {
@@ -240,4 +261,25 @@ String HttpMethodToString(const HTTPMethod method) {
     default:
       return String(method);
   }
+}
+
+bool parseJsonIntField(String jsonBody, String field, long& value) {
+  if (jsonBody.isEmpty()) {
+    return false;
+  }
+  DynamicJsonDocument doc(50);
+  DeserializationError err = deserializeJson(doc, jsonBody);
+  if (err) {
+    Serial.print("Deserialization error: ");
+    Serial.println(err.f_str());
+    return false;  
+  }
+  JsonObject root = doc.as<JsonObject>();
+  if (!root.containsKey("value")) {
+    Serial.println("missing 'value' field");
+    return false;
+  }
+
+  value = root["value"].as<long>();
+  return true;
 }

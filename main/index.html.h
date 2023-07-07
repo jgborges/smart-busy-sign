@@ -122,13 +122,13 @@ const char *indexHtml = R"====(
             <input style="font-family:monospace" type="text" id="autoSleepActiveHourStart" name="autoSleepActiveHourStart" value="" maxlength="2" size="4"> and 
             <input style="font-family:monospace" type="text" id="autoSleepActiveHourEnd" name="autoSleepActiveHourEnd" value="" maxlength="2" size="4"> hours of the days<br>
             <span style="font-size:small">
+              <input type="checkbox" id="sunday" name="sunday">Sun
               <input type="checkbox" id="monday" name="monday">Mon
               <input type="checkbox" id="tuesday" name="tuesday">Tue
               <input type="checkbox" id="wednesday" name="wednesday">Wed
               <input type="checkbox" id="thursday" name="thursday">Thu
               <input type="checkbox" id="friday" name="friday">Fri
               <input type="checkbox" id="saturday" name="saturday">Sat
-              <input type="checkbox" id="sunday" name="sunday">Sun
             </span>
           </td>
         </tr>
@@ -137,7 +137,9 @@ const char *indexHtml = R"====(
     </form>
     <h1>Tools</h1>
     <form>
-    <input type="button" value="Reboot" onclick="reboot()" /> <input type="button" value="Factory Reset" onclick="factoryReset()" />
+    <input type="button" value="Reboot" onclick="reboot()" /> 
+    <input type="button" value="Sleep" onclick="sleep()" /> 
+    <input type="button" value="Factory Reset" onclick="factoryReset()" />
     </form>
   </body>
   <script>
@@ -148,6 +150,8 @@ const char *indexHtml = R"====(
       'yellow': 'Yellow',
       'green': 'LightGreen',
     };
+
+    var daysOfWeek = [ 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday' ];
 
     function load() {
       loadStatus();
@@ -253,8 +257,6 @@ const char *indexHtml = R"====(
       document.getElementById('autoSleepActiveHourStart').value = data.autoSleep?.activeHourStart;
       document.getElementById('autoSleepActiveHourEnd').value = data.autoSleep?.activeHourEnd;
 
-      const daysOfWeek = [ 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday' ];
-
       for (const day of daysOfWeek) {
         if (data.autoSleep?.activeDaysOfWeek?.includes(day)) {
           document.getElementById(day).checked = true;
@@ -266,6 +268,7 @@ const char *indexHtml = R"====(
 
     async function updateWifiConfig(e) {
       e.preventDefault();
+      document.getElementById("wifi-warn").textContent = "";
 
       const mode = document.querySelector('input[name="wifiMode"]:checked')?.value;
       const ssid = document.getElementById('ssid').value?.trim();
@@ -295,8 +298,15 @@ const char *indexHtml = R"====(
     async function updateUserSettings(e) {
       e.preventDefault();
 
+      document.getElementById("settings-warn").textContent = "";
+
       const tzOffset = document.getElementById('tzOffset').value?.trim();
       const autoTurnOffPeriod = document.getElementById('autoTurnOffPeriod').value?.trim();
+      const autoSleepEnabled = document.getElementById('autoSleepEnabled').checked === true;
+      const autoSleepPeriod = document.getElementById('autoSleepPeriod').value?.trim();
+      const autoSleepActiveHourStart = document.getElementById('autoSleepActiveHourStart').value?.trim();
+      const autoSleepActiveHourEnd = document.getElementById('autoSleepActiveHourEnd').value?.trim();
+      const autoSleepActiveDaysOfWeek = daysOfWeek.filter(d => document.getElementById(d).checked);
 
       const body = {};
       if (!tzOffset || +tzOffset < (-11*60) || +tzOffset > (11*60)) {
@@ -313,10 +323,39 @@ const char *indexHtml = R"====(
         body.autoTurnOffPeriod = +autoTurnOffPeriod;
       }
 
+      if (autoSleepEnabled) {
+        if (!autoSleepPeriod || +autoSleepPeriod <= 0 || +autoSleepPeriod > 720) {
+          alert('Please select a value for the period for inactivity before sleep between 1 min and 720 min (12h)');
+          return;
+        } else if (!autoSleepActiveHourStart || +autoSleepActiveHourStart < 0 || +autoSleepActiveHourStart > 23) {
+          alert('Please select a value for active time start hour in the interval 0h to 23h');
+          return;
+        } else if (!autoSleepActiveHourEnd || +autoSleepActiveHourEnd < 0 || +autoSleepActiveHourEnd > 23) {
+          alert('Please select a value for active time end hour in the interval 0h to 23h');
+          return;
+        } else if (+autoSleepActiveHourStart == +autoSleepActiveHourEnd) {
+          alert('Please select a value for active time start hour that is not equal to end hour');
+          return;
+        } else if (autoSleepActiveDaysOfWeek.lengrh == 0) {
+          alert('Please select at least on day of the week for active time');
+          return;
+        }
+
+        body.autoSleep = {
+          enabled: true,
+          period: +autoSleepPeriod,
+          activeHourStart: +autoSleepActiveHourStart,
+          activeHourEnd: +autoSleepActiveHourEnd,
+          activeDaysOfWeek: autoSleepActiveDaysOfWeek,
+        }
+      } else {
+        body.autoSleep = { enabled: false };
+      }
+
       const response = await post('/admin/settings', body);
 
       if (response.ok) {
-        document.getElementById("settings-warn").textContent = "Successfully updated settings! Device will reboot";
+        document.getElementById("settings-warn").textContent = "Successfully updated settings!";
       } else {
         document.getElementById("settings-warn").textContent = "Failed to update settings!";
       }
@@ -338,6 +377,15 @@ const char *indexHtml = R"====(
       console.info("Rebooting device...");
       const response = await post('/admin/reboot');
       console.info(response);
+    }
+
+    async function sleep() {
+      const time = prompt("Sleep will put your device into a low energy state. Presse reset button to wake-up.\n\nPlease select the time in minutes to sleep (0=indefinetely):", 15);
+      if (time != null && +time >= 0) {
+        console.info("Making device sleep...");
+        const response = await post('/admin/sleep', { value: time });
+        console.info(response);
+      }    
     }
 
     async function factoryReset() {

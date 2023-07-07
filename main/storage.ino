@@ -285,10 +285,12 @@ String getUserSettings() {
   autoSleep["period"] = settings.autoSleep.period;
   autoSleep["activeHourStart"] = settings.autoSleep.activeHourStart;
   autoSleep["activeHourEnd"] = settings.autoSleep.activeHourEnd;
-  //JsonArray days = autoSleep.createNestedArray("activeDaysOfWeek");
-  //for (auto& d : settings.autoSleep.getActiveDaysOfWeek()) {
-  //  days.add((int)d);
-  //}
+  JsonArray days = autoSleep.createNestedArray("activeDaysOfWeek");
+  for (auto& d : settings.autoSleep.getActiveDaysOfWeek()) {
+    String dText = singleDayOfWeekToString(d);
+    dText.toLowerCase();
+    days.add(dText);
+  }
   doc["autoSleep"] = autoSleep;
 
   String message = "";
@@ -308,7 +310,7 @@ PostResult setUserSettings(String jsonBody) {
   if (jsonBody.isEmpty()) {
     return BAD_REQUEST;
   }
-  DynamicJsonDocument doc(250);
+  DynamicJsonDocument doc(500);
   DeserializationError err = deserializeJson(doc, jsonBody);
   if (err) {
     Serial.print("Deserialization error: ");
@@ -331,16 +333,30 @@ PostResult setUserSettings(String jsonBody) {
   }
   if (root.containsKey("autoSleep")) {
     JsonObject autoSleep = root["autoSleep"].as<JsonObject>();
-    if (autoSleep.containsKey("enabled") && autoSleep.containsKey("activeHourStart") && autoSleep.containsKey("activeHourEnd")) {
-      newSettings.autoSleep.enabled = autoSleep["enabled"].as<bool>();
-      newSettings.autoSleep.period = autoSleep["period"].as<ushort>();
-      newSettings.autoSleep.activeHourStart = autoSleep["activeHourStart"].as<byte>() % 24;
-      newSettings.autoSleep.activeHourEnd = autoSleep["activeHourEnd"].as<byte>() % 24;
-      //newSettings.autoSleep.activeDaysOfWeek = autoSleep["daysOfWeek"].as<JsonArray>();
-    } else {
-      Serial.println("missing any of the autoSleep fields: 'enabled', 'period', 'activeHourStart', and 'activeHourEnd'");
+    if (!autoSleep.containsKey("enabled")) {
+      Serial.println("missing the 'enabled' field for autoSleep");
       return BAD_REQUEST;
     }
+    newSettings.autoSleep.enabled = autoSleep["enabled"].as<bool>();
+
+    if (newSettings.autoSleep.enabled) {
+      if (autoSleep.containsKey("period") && autoSleep.containsKey("activeHourStart") && autoSleep.containsKey("activeHourEnd")) {
+        newSettings.autoSleep.period = autoSleep["period"].as<ushort>();
+        newSettings.autoSleep.activeHourStart = autoSleep["activeHourStart"].as<byte>() % 24;
+        newSettings.autoSleep.activeHourEnd = autoSleep["activeHourEnd"].as<byte>() % 24;
+        if (autoSleep.containsKey("activeDaysOfWeek")) {
+          std::vector<DayOfWeek> daysOfWeek;
+          for (JsonVariant day : autoSleep["activeDaysOfWeek"].as<JsonArray>()) {
+            String d = String(day.as<const char*>());
+            daysOfWeek.push_back(stringToDayOfWeek(d));
+          }
+          newSettings.autoSleep.setActiveDaysOfWeek(daysOfWeek);
+        }
+      } else {
+        Serial.println("missing any of the autoSleep fields: 'period', 'activeHourStart', and 'activeHourEnd'");
+        return BAD_REQUEST;
+      }
+    } 
   }
 
   // persist on EEPROM
