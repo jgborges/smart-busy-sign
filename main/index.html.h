@@ -109,18 +109,19 @@ const char *indexHtml = R"====(
             <span id="clock" style="font-size:small"></span>
           </td>
         </tr>
+        <tr><td colspan="2"><hr><h3>Energy Saving</h3></td></tr>
         <tr>
-          <td><label for="autoTurnOffPeriod">Automatic panel turn-off</label></td>
-          <td><input style="font-family:monospace" type="text" id="autoTurnOffPeriod" name="autoTurnOffPeriod" value="" size="6"> minutes</td>
+          <td><label for="autoTurnOffPeriod">Automatic turn-off lights</label></td>
+          <td><input style="font-family:monospace" type="text" id="autoTurnOffPeriod" name="autoTurnOffPeriod" value="" size="6"> minutes of inactivity</td>
         </tr>
         <tr>
-          <td><label for="autoSleep">Automatic sleep</label></td>
+          <td><label for="autoSleep">Automatic device sleep</label></td>
           <td>
             <input type="checkbox" id="autoSleepEnabled" name="autoSleepEnabled">Auto sleep enabled<br>
             <input style="font-family:monospace" type="text" id="autoSleepPeriod" name="autoSleepPeriod" value="" size="6"> minutes<br>
             Prevent sleep between 
             <input style="font-family:monospace" type="text" id="autoSleepActiveHourStart" name="autoSleepActiveHourStart" value="" maxlength="2" size="4"> and 
-            <input style="font-family:monospace" type="text" id="autoSleepActiveHourEnd" name="autoSleepActiveHourEnd" value="" maxlength="2" size="4"> hours of the days<br>
+            <input style="font-family:monospace" type="text" id="autoSleepActiveHourEnd" name="autoSleepActiveHourEnd" value="" maxlength="2" size="4"> hours of the day<br>
             <span style="font-size:small">
               <input type="checkbox" id="sunday" name="sunday">Sun
               <input type="checkbox" id="monday" name="monday">Mon
