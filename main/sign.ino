@@ -41,12 +41,21 @@
 
 */
 
+#include "defines.h"
 #define SIGN_SN_DEFAULT 10001
 
 #define SIGN_MODEL "smart-busy-sign_V0"
 #define SIGN_VERSION "V0"
 
 #define RESET_GPIO D6
+
+struct PanelStatus {
+  String name;
+  PanelState state;
+  String color;
+  byte intensity;
+  ushort ttl;
+};
 
 const std::map<LedTypes, String> LedToColor = {
   { WHITE, "white" },
@@ -67,23 +76,56 @@ const std::map<String, LedTypes> ColorToLed = {
   { "blue", BLUE },
 };
 
+// initialize with default panel setup
+const PanelSetupMap panelSetupMap = {
+  { "busy",           { {WHITE,    {D3,CATHODE_CONTROL_LED}} }}, 
+  //                    {RED,      {D3,CATHODE_CONTROL_LED}} }},
+  { "camera",         { {YELLOW,   {D5,CATHODE_CONTROL_LED}} }},
+  { "microphone",     { {YELLOW,   {D6,CATHODE_CONTROL_LED}} }},
+  { "do-not-disturb", { {RED,      {D7,CATHODE_CONTROL_LED}} }}
+  //{ "alert",        { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
+  //                    {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
+  //                    {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}
+};
+
 std::map<String, PanelStatus> statusMap;
 
 ulong lastTTLCheck;
 
 void setupSign() {
+  //buildPanelSetupMap(devInfo, panelSetupMap);
   setupGpio(panelSetupMap); // set all to disabled
 
-  initStatus();
+  buildStatusMap(panelSetupMap);
   // appy default sign status
   applySignStatus(); // turn all of as gpios are initiated in DISABLED state
 
   lastTTLCheck = millis();
 }
 
-void initStatus() {
+// void buildPanelSetupMap(const DeviceInfo& devInfo, PanelSetupMap& panelSetup) {
+//   panelSetup.clear();
+//   for (byte gpio=0; gpio < MAX_PINS; gpio++) {
+//     const PanelInfo& panel = devInfo.panels[gpio];
+//     if (!panel.enabled) {
+//       continue;
+//     }
+//     String name = String(panel.name);
+//     if (panelSetup.count(name)) {
+//       auto ledSetupMap = panelSetup.at(name);
+//       if (!ledSetupMap.count(panel.led)) {
+//         ledSetupMap.insert({ panel.led, panel.pin });
+//       }
+//     } else {
+//       panelSetup.insert({ name, {{ panel.led, panel.pin }} });
+//     }
+//   }
+// }
+
+void buildStatusMap(const PanelSetupMap& panelSetup) {
+  statusMap.clear();
   int numOfPanels = 0;
-  for (auto& item: panelSetupMap) {
+  for (auto& item: panelSetup) {
     String name = item.first;
     LedTypes firstLed = item.second.begin()->first;
     String color = LedToColor.at(firstLed);
@@ -279,6 +321,39 @@ byte getIntensityByte(String value) {
   }
 }
 
+bool colorToRGB(String color, byte intensity, int& r, int& g, int& b) {
+  if (color.equals("white")) {
+    r = intensity;
+    g = intensity;
+    b = intensity;
+  } else if (color.equals("red")) {
+    r = intensity;
+    g = 0;
+    b = 0;
+  } else if (color.equals("green")) {
+    r = 0;
+    g = intensity;
+    b = 0;
+  } else if (color.equals("blue")) {
+    r = 0;
+    g = 0;
+    b = intensity;
+  } else if (color.equals("yellow")) {
+    r = intensity;
+    g = intensity;
+    b = 0;
+  } else if (color.startsWith("#") && color.length() == 7) {
+    long hexValue = (long) strtol( &color[1], NULL, 16);
+    float alpha = (float)intensity;
+    r = ((hexValue >> 16) & 0xFF) * alpha / 255.0; // Extract the RR byte
+    g = ((hexValue >> 8) & 0xFF) * alpha / 255.0; // Extract the GG byte
+    b = ((hexValue) & 0xFF) * alpha / 255.0; // Extract the BB byte
+  } else {
+    return false;
+  }
+  return true;
+}
+
 String panelStateToString(PanelState state) {
   switch (state) {
     default:
@@ -311,37 +386,4 @@ PanelState parsePanelState(String state) {
   } else {
     return PANEL_DISABLED;
   }
-}
-
-bool colorToRGB(String color, byte intensity, int& r, int& g, int& b) {
-  if (color.equals("white")) {
-    r = intensity;
-    g = intensity;
-    b = intensity;
-  } else if (color.equals("red")) {
-    r = intensity;
-    g = 0;
-    b = 0;
-  } else if (color.equals("green")) {
-    r = 0;
-    g = intensity;
-    b = 0;
-  } else if (color.equals("blue")) {
-    r = 0;
-    g = 0;
-    b = intensity;
-  } else if (color.equals("yellow")) {
-    r = intensity;
-    g = intensity;
-    b = 0;
-  } else if (color.startsWith("#") && color.length() == 7) {
-    long hexValue = (long) strtol( &color[1], NULL, 16);
-    float alpha = (float)intensity;
-    r = ((hexValue >> 16) & 0xFF) * alpha / 255.0; // Extract the RR byte
-    g = ((hexValue >> 8) & 0xFF) * alpha / 255.0; // Extract the GG byte
-    b = ((hexValue) & 0xFF) * alpha / 255.0; // Extract the BB byte
-  } else {
-    return false;
-  }
-  return true;
 }

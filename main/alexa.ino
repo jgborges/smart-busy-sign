@@ -3,14 +3,15 @@
 fauxmoESP fauxmo;
 
 void setupAlexa() {
-  Serial.print("Initializing Alexa support...");
-  //fauxmo.createServer(false); // required when integrating with existing webserver
-  fauxmo.addDevice("Busy panel");
-  fauxmo.addDevice("Camera panel");
-  fauxmo.addDevice("Mic panel");
-  fauxmo.addDevice("Do not disturb");
+  Serial.println("Initializing Alexa support...");
+  fauxmo.createServer(false);
+  fauxmo.setPort(80); // required for gen3 devices
 
-  //fauxmo.setPort(80); // required for gen3 devices
+  fauxmo.addDevice("busy");
+  fauxmo.setDeviceUniqueId(fauxmo.getDeviceId("busy"), "panel_busy_0");
+  //fauxmo.addDevice("camera");
+  //fauxmo.addDevice("mic");
+  //fauxmo.addDevice("do-not-disturb");
   fauxmo.enable(true);
 
   Serial.println("Done");

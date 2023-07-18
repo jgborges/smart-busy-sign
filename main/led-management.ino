@@ -1,3 +1,23 @@
+
+struct GpioState {
+  PanelState state;
+  byte intensity;
+  bool isPosAnode;
+
+  BlinkingType blinkingType() {
+    switch (this->state) {
+      case PANEL_BLINKING:
+        return BLINKING_NORMAL;
+      case PANEL_BLINKING_FAST:
+        return BLINKING_FAST;
+      case PANEL_BLINKING_SLOW:
+        return BLINKING_SLOW;
+      default:
+        return BLINKING_OFF;
+    }
+  }
+};
+
 // blinking intervals, coded as { <iterval on>, <interval off> } in milliseconds
 const std::map<BlinkingType, std::array<ushort, 2>> BlinkIntervals = {
   { BLINKING_SLOW,   { 900, 600 }}, // 1.5 second cycle
@@ -5,14 +25,28 @@ const std::map<BlinkingType, std::array<ushort, 2>> BlinkIntervals = {
   { BLINKING_FAST,   { 150, 150 }}  // 0.3 second cycle
 };
 
-GpioState gpioStates[NUM_DIGITAL_PINS]; // ESP8266 has 16 GPIOs
+struct BlinkingState {
+  // blinking params
+  ushort intervalOn;
+  ushort intervalOff;
+  // manage on/off state for blinking effect
+  bool isLightOn;
+  ulong lastStateChangeMillis;
+};
+
+GpioState gpioStates[MAX_PINS]; // ESP8266 has 16 GPIOs
 BlinkingState blinkingStates[NumBlinkingTypes];
 
 ulong lastBlinkCheck;
 
-void setupGpio(const PanelSetup& setup) {
+void setupGpio(const PanelSetupMap& setup);
+bool isOn(PanelState state);
+bool isOff(PanelState state);
+
+
+void setupGpio(const PanelSetupMap& setup) {
   // initialize default values
-  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+  for (int gpio=0; gpio < MAX_PINS; gpio++) {
     gpioStates[gpio].state = PANEL_DISABLED;
     gpioStates[gpio].intensity = 255;
   }
@@ -69,7 +103,7 @@ void turnLightOff(uint8_t gpio) {
 
 void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   Serial.print(" gpio " + String(gpio) + ": ");
-  if (gpio >= NUM_DIGITAL_PINS) {
+  if (gpio >= MAX_PINS) {
     Serial.println("invalid gpio pin");
     return;
   }
@@ -115,7 +149,7 @@ void enablePanels() {
 }
 
 void turnAllLightsOn() {
-  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+  for (int gpio=0; gpio < MAX_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {
       continue;
     }
@@ -124,7 +158,7 @@ void turnAllLightsOn() {
 }
 
 void turnAllLightsOff() {
-  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+  for (int gpio=0; gpio < MAX_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {
       continue;
     }
@@ -133,7 +167,7 @@ void turnAllLightsOff() {
 }
 
 bool isAllLightsOff() {
-  for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+  for (int gpio=0; gpio < MAX_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {
       continue;
     } else if (gpioStates[gpio].state != PANEL_OFF) {
@@ -160,7 +194,7 @@ void handleBlinking() {
     bool trigger = blinkElapsed > interval;
     if (trigger) {
       blink.isLightOn = !blink.isLightOn;
-      for (int gpio=0; gpio < NUM_DIGITAL_PINS; gpio++) {
+      for (int gpio=0; gpio < MAX_PINS; gpio++) {
         GpioState& light = gpioStates[gpio];
         if (light.blinkingType() != blinkType) {
           continue;

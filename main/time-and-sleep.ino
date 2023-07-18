@@ -1,7 +1,6 @@
 #include "time.h"
 #include <WiFiUdp.h>
 #include <NTPClient.h>
-#include "user_interface.h"
 
 #define MAX_DEEP_SLEEP_IN_MINUTES 60
 #define MINUTES_TO_PRINT_SLEEP_INFO 1
@@ -19,12 +18,6 @@ bool isInactive;
 ulong inactiveTimeStart;
 
 void setupTime() {
-  // required for light sleep
-  //wifi_fpm_set_wakeup_cb(fpm_wakup_cb_func1);
-  // enable light sleep
-  //wifi_fpm_set_sleep_type(LIGHT_SLEEP_T);
-  //wifi_fpm_open();
-
   const int offset = getTzOffsetInSecods();
   const int updateInterval = 3600000; // 1h
   timeClient.begin();
@@ -152,24 +145,25 @@ void handleAutoSleep(bool print) {
   }
 
   // determine for how long we can sleep based on active days and active hours
+  // (we only need to look 1h in advance, as this is the max sleep time) 
+  int mcur = timeClient.getMinutes();
   DayOfWeek dnext = getDayOfWeek(timeClient.getEpochTime(), 1);
   bool isNextDayActive = (dnext & activeDays) > 0;
-
-  ulong sleepTimeInHours = 1;
-  if (hcur < hstart) {
-    sleepTimeInHours = hstart - hcur;
+  ulong sleepTimeInMinutes = 60;
+  if (hcur >= 23 && mcur > 0) {
+    sleepTimeInMinutes = (60-mcur) + (isNextDayActive ? hstart*60 : MAX_DEEP_SLEEP_IN_MINUTES);
   } else {
-    sleepTimeInHours = (24-hcur) + (isNextDayActive ? hstart : 24);
+    sleepTimeInMinutes = ((24-hcur)*60)-mcur;
   }
 
   turnAllLightsOff();
 
-  deepSleep(sleepTimeInHours*60);
+  deepSleep(sleepTimeInMinutes);
 }
 
 void deepSleep(ulong sleepTimeInMinutes) {
   ulong validSleepTimeInMinutes = std::min(sleepTimeInMinutes, (ulong)MAX_DEEP_SLEEP_IN_MINUTES);
-  Serial.println("Entering deep sleep for " + String(sleepTimeInMinutes) + " minutes");
+  Serial.println("Entering deep sleep for " + String(validSleepTimeInMinutes) + " minutes");
 
   digitalWrite(D0, LOW);
   ulong sleepTimeInMicroSeconds = validSleepTimeInMinutes*60*1000*1000; // in microseconds
@@ -177,6 +171,7 @@ void deepSleep(ulong sleepTimeInMinutes) {
 }
 
 void lightSleep() {
+#if defined(ESP8266)
   // optional: register one or more wake-up interrupts. the chip
   // will wake from whichever (timeout or interrupt) occurs earlier
   //gpio_pin_wakeup_enable(D2, GPIO_PIN_INTR_HILEVEL);
@@ -196,81 +191,37 @@ void fpm_wakup_cb_func1() {
   // ok to use blocking functions in the callback, but not
   // delay(), which appears to cause a reset
   Serial.println("Light sleep is over");
+#else
+  Serial.println("Light sleep not configured/supported");
+#endif
 }
 
-String singleDayOfWeekToString(DayOfWeek day) {
-  switch (day) {
-    case SUNDAY:
-      return "sunday";
-    case MONDAY:
-      return "monday";
-    case TUESDAY:
-      return "tuesday";
-    case WEDNESDAY:
-      return "wednesday";
-    case THURSDAY:
-      return "thursday";
-    case FRIDAY:
-      return "friday";
-    case SATURDAY:
-      return "saturday";
+
+bool isWakingFromDeepSleep() {
+#if defined(ESP8266)
+  return ESP.getResetInfoPtr()->reason == REASON_DEEP_SLEEP_AWAKE;
+#elif defined(ESP32)
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason) {
+    case ESP_SLEEP_WAKEUP_EXT0:
+      Serial.println("Wakeup caused by external signal using RTC_IO");
+      return true;
+    case ESP_SLEEP_WAKEUP_EXT1:
+      Serial.println("Wakeup caused by external signal using RTC_CNTL");
+      return true;
+    case ESP_SLEEP_WAKEUP_TIMER:
+      Serial.println("Wakeup caused by timer");
+      return true;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+      Serial.println("Wakeup caused by touchpad");
+      return true;
+    case ESP_SLEEP_WAKEUP_ULP:
+      Serial.println("Wakeup caused by ULP program");
+      return true;
     default:
-      return "unknown";
+      Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason);
+      return false;
   }
-}
-
-String dayOfWeekToString(DayOfWeek day) {
-  switch (day) {
-    case SUNDAY:
-      return "sunday";
-    case MONDAY:
-      return "monday";
-    case TUESDAY:
-      return "tuesday";
-    case WEDNESDAY:
-      return "wednesday";
-    case THURSDAY:
-      return "thursday";
-    case FRIDAY:
-      return "friday";
-    case SATURDAY:
-      return "saturday";
-    case ALL_DAYS:
-      return "all week";
-    case WEEKDAY:
-      return "weekdays";
-    case WEEKEND:
-      return "weekend";
-    case NONE:
-      return "no days";
-    default:
-      String out = "";
-      for (auto& d : AllDaysOfWeek) {
-        if ((d & day) > 0) {
-          out += singleDayOfWeekToString(d) + ",";
-        }
-      }
-      return out;
-  }
-}
-
-DayOfWeek stringToDayOfWeek(String day) {
-  day.toLowerCase();
-  if (day.equals("sunday")) {
-    return SUNDAY;
-  } else if (day.equals("monday")) {
-    return MONDAY;
-  } else if (day.equals("tuesday")) {
-    return TUESDAY;
-  } else if (day.equals("wednesday")) {
-    return WEDNESDAY;
-  } else if (day.equals("thursday")) {
-    return THURSDAY;
-  } else if (day.equals("friday")) {
-    return FRIDAY;
-  } else if (day.equals("saturday")) {
-    return SATURDAY;
-  } else {
-    return NONE;
-  }
+#endif
 }

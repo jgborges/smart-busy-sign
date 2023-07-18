@@ -1,8 +1,49 @@
-#include <map>
-#include <array>
-#include <vector>
+#ifndef DEFINES_H
+#define DEFINES_H
 
-#define DEBUG_FAUXMO Serial
+#if defined(ESP8266)
+  #include <ESP8266WiFi.h>
+  #include <ESP8266mDNS.h>
+  #include <ESP8266NetBIOS.h>
+
+  #define BOARD_MODEL ARDUINO_BOARD
+  #define BOARD_ID ARDUINO_BOARD_ID
+  #define BOARD_VERSION ARDUINO_ESP8266_RELEASE
+  #define MAX_PINS NUM_DIGITAL_PINS
+  
+  ADC_MODE(ADC_VCC); // measure voltage in ADC input
+#elif defined(ESP32)
+  #include <WiFi.h>
+  #include <ESPmDNS.h>
+  #include <NetBIOS.h>
+  #include "driver/gpio.h"
+
+  #define BOARD_MODEL ARDUINO_BOARD
+  #define BOARD_ID ARDUINO_VARIANT
+  #define BOARD_VERSION "ESP32-WROOM-32D"
+  #define MAX_PINS NUM_DIGITAL_PINS
+
+  #define D0 A0
+  #define D1 A3
+  #define D2 A4
+  #define D3 A5
+  #define D4 A6
+  #define D5 A7
+  #define D6 A10
+  #define D7 A11
+  #define D8 A12
+  #define D9 A13
+  #define D10 A14
+  #define D11 A15
+  #define D12 A16
+  #define D13 A17
+  #define D14 A18
+  #define D15 A19
+
+  #define LED_BUILTIN A12
+#else
+#error "This is not a ESP8266 or ESP32 board!"
+#endif
 
 #define ANODE_CONTROL_LED true
 #define CATHODE_CONTROL_LED false
@@ -22,23 +63,8 @@ struct LedSetup {
   bool isPosAnode;
 };
 
-typedef std::map<String, std::map<LedTypes, LedSetup>> PanelSetup;
-
-// initialize with default panel setup
-const PanelSetup panelSetupMap = {
-  { "busy",           { {WHITE,    {D5,CATHODE_CONTROL_LED}} }}, 
-  //                    {RED,      {D3,CATHODE_CONTROL_LED}} }},
-  { "camera",         { {YELLOW,   {D6,CATHODE_CONTROL_LED}} }},
-  { "microphone",     { {YELLOW,   {D7,CATHODE_CONTROL_LED}} }},
-  { "do-not-disturb", { {RED,      {D8,CATHODE_CONTROL_LED}} }}
-  //{ "alert",        { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
-  //                    {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
-  //                    {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}
-};
-
-enum BlinkingType { BLINKING_NORMAL, BLINKING_FAST, BLINKING_SLOW, BLINKING_OFF };
-
-const int NumBlinkingTypes = BLINKING_OFF - BLINKING_NORMAL;
+typedef std::map<LedTypes, LedSetup> LedSetupMap;
+typedef std::map<String, LedSetupMap> PanelSetupMap;
 
 enum PanelState {
   PANEL_DISABLED,
@@ -49,41 +75,9 @@ enum PanelState {
   PANEL_BLINKING_SLOW
 };
 
-struct PanelStatus {
-  String name;
-  PanelState state;
-  String color;
-  byte intensity;
-  ushort ttl;
-};
+enum BlinkingType { BLINKING_NORMAL, BLINKING_FAST, BLINKING_SLOW, BLINKING_OFF };
 
-struct GpioState {
-  PanelState state;
-  byte intensity;
-  bool isPosAnode;
-
-  BlinkingType blinkingType() {
-    switch (this->state) {
-      case PANEL_BLINKING:
-        return BLINKING_NORMAL;
-      case PANEL_BLINKING_FAST:
-        return BLINKING_FAST;
-      case PANEL_BLINKING_SLOW:
-        return BLINKING_SLOW;
-      default:
-        return BLINKING_OFF;
-    }
-  }
-};
-
-struct BlinkingState {
-  // blinking params
-  ushort intervalOn;
-  ushort intervalOff;
-  // manage on/off state for blinking effect
-  bool isLightOn;
-  ulong lastStateChangeMillis;
-};
+const int NumBlinkingTypes = BLINKING_OFF - BLINKING_NORMAL;
 
 enum ParsingResult { 
   PARSE_SUCCESS, 
@@ -100,42 +94,6 @@ enum PostResult {
   SERVER_ERROR
 };
 
-// permanent sign information
-struct DeviceInfo {
-  char signModel[36];
-  char serialNumber[26];
-  char manufacturingDate[26];
-  byte setValue; // make it last field so any change will invalidate the whole struct
-
-  bool isSet() {
-    return this->setValue == EEPROM_SET;
-  }
-};
-
-// wifi connection information
-struct WifiConfig {
-  WiFiMode_t mode;
-  char ssid[33]; // ssd can be 32 char at most
-  char psk[63];  // psk can be 62 char at most
-  byte setValue; // make it last field so any change will invalidate the whole struct
-
-  bool isWifiSet() {
-    return this->setValue == EEPROM_SET;
-  }
-
-  String modeAsString() {
-    if (this->mode == WIFI_STA) {
-      return "sta";
-    } else if (this->mode == WIFI_AP) {
-      return "ap";
-    }else if (this->mode == WIFI_OFF) {
-      return "off";
-    } else {
-      return "unknown";
-    }
-  }
-};
-
 // User settings
 enum DayOfWeek : byte { 
   NONE=0,
@@ -145,6 +103,7 @@ enum DayOfWeek : byte {
   ALL_DAYS=SUNDAY|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY,
 };
 
+//const std::array<DayOfWeek, 7> AllDaysOfWeek = { SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY };
 const std::array AllDaysOfWeek = { SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY };
 
 struct AutoSleepSettings {
@@ -188,3 +147,5 @@ struct Settings {
     return this->setValue == EEPROM_SET;
   }
 };
+
+#endif

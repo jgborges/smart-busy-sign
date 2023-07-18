@@ -1,28 +1,14 @@
-#if defined(ESP8266)
-  #include <ESP8266WiFi.h>
-  #include <ESP8266NetBIOS.h>
-  #include <ESP8266mDNS.h>
-  #include <ESP8266WebServer.h>
-
-  #define BOARD_MODEL ARDUINO_BOARD
-  #define BOARD_ID ARDUINO_BOARD_ID
-  #define BOARD_VERSION ARDUINO_ESP8266_RELEASE
-#elif defined(ESP32)
-  #include <WiFi.h>
-
-  #define BOARD_MODEL ARDUINO_BOARD
-  #define BOARD_ID ARDUINO_BOARD_ID
-  #define BOARD_VERSION ARDUINO_ESP32_RELEASE
-#endif
-
 #include <ArduinoJson.h>
 #include <algorithm>
+#include <map>
+#include <array>
+#include <vector>
 #include "defines.h"
+#include "sign.h"
+#include "storage.h"
 
 const short FW_MAJOR = 1;
 const short FW_MINOR = 0;
-
-ADC_MODE(ADC_VCC);
 
 bool staConnectionFailed = false;
 
@@ -54,17 +40,13 @@ void setup() {
 }
 
 void loop() {
-  MDNS.update();
+  handleMDNS();
   handleSleep();
   handleClient();
   handleBlinking();
   handleTTL();
   handleAlexa();
   yield();
-}
-
-bool isWakingFromDeepSleep() {
-  return ESP.getResetInfoPtr()->reason == REASON_DEEP_SLEEP_AWAKE;
 }
 
 void reboot() {

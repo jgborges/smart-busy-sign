@@ -1,250 +1,360 @@
-#include "index.html.h"  // indexHtml
+#include "index.html.h"
 #include "resources/images.h"
-#include <uri/UriBraces.h>
+#include <ESPAsyncWebSrv.h>
 
 const unsigned int port = 80;
 
-// Create an instance of the web server
-// specify the port to listen on as an argument
-ESP8266WebServer webServer(port);
+AsyncWebServer webServer(port);
+
+class OneParamRewrite : public AsyncWebRewrite
+{
+  protected:
+    String _urlPrefix;
+    int _paramIndex;
+    String _paramsBackup;
+
+  public:
+  OneParamRewrite(const char* from, const char* to)
+    : AsyncWebRewrite(from, to) {
+
+      _paramIndex = _from.indexOf('{');
+
+      if (_paramIndex >=0 && _from.endsWith("}")) {
+        _urlPrefix = _from.substring(0, _paramIndex);
+        int index = _params.indexOf('{');
+        if(index >= 0) {
+          _params = _params.substring(0, index);
+        }
+      } else {
+        _urlPrefix = _from;
+      }
+      _paramsBackup = _params;
+  }
+
+  bool match(AsyncWebServerRequest *request) override {
+    if (request->url().startsWith(_urlPrefix)) {
+      if (_paramIndex >= 0) {
+        _params = _paramsBackup + request->url().substring(_paramIndex);
+      } else {
+        _params = _paramsBackup;
+      }
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+void nullHandler(AsyncWebServerRequest *request);
+void handleHomeGet(AsyncWebServerRequest *request);
+void handleResourcesGet(AsyncWebServerRequest *request);
+void handleStatusGet(AsyncWebServerRequest *request);
+void handleStatusPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleAdminDeviceGet(AsyncWebServerRequest *request);
+void handleAdminDevicePost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleAdminWifiGet(AsyncWebServerRequest *request);
+void handleAdminWifiPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleAdminWifiScanGet(AsyncWebServerRequest *request);
+void handleAdminSettingsGet(AsyncWebServerRequest *request);
+void handleAdminSettingsPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleAdminRebootPost(AsyncWebServerRequest *request);
+void handleAdminSleepPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+void handleAdminResetPost(AsyncWebServerRequest *request);
+void handleNotFound(AsyncWebServerRequest *request);
+void handleRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
+String printRequestArgs(AsyncWebServerRequest *request);
+String httpMethodToString(const WebRequestMethodComposite method);
 
 void setupWebServer() {
-  webServer.on(F("/"), HTTP_GET, handleHome);
-  webServer.on(UriBraces("/resources/{}"), HTTP_GET, handleResources);
-  webServer.on(F("/status"), handleStatus);
-  webServer.on(F("/admin/device"), handleAdminDevice);
-  webServer.on(F("/admin/wifi"), handleAdminWifi);
-  webServer.on(F("/admin/settings"), handleAdminSettings);
-  webServer.on(F("/admin/reboot"), HTTP_POST, handleAdminReboot);
-  webServer.on(F("/admin/sleep"), HTTP_POST, handleAdminSleep);
-  webServer.on(F("/admin/factory-reset"), HTTP_POST, handleAdminReset);
+  webServer.on("/", HTTP_GET, handleHomeGet);
+  webServer.on("/resources", HTTP_GET, handleResourcesGet);
+  webServer.addRewrite(new OneParamRewrite("/resources/{id}", "/resources?id={id}"));
+  webServer.on("/status", HTTP_GET, handleStatusGet);
+  webServer.on("/status", HTTP_POST, nullHandler, NULL, handleStatusPost);
+  webServer.on("/admin/device", HTTP_GET, handleAdminDeviceGet);
+  webServer.on("/admin/device", HTTP_POST, nullHandler, NULL, handleAdminDevicePost);
+  webServer.on("/admin/wifi", HTTP_GET, handleAdminWifiGet);
+  webServer.on("/admin/wifi", HTTP_POST, nullHandler, NULL, handleAdminWifiPost);
+  webServer.on("/admin/scan", HTTP_GET, handleAdminWifiScanGet);
+  webServer.on("/admin/settings", HTTP_GET, handleAdminSettingsGet);
+  webServer.on("/admin/settings", HTTP_POST, nullHandler, NULL, handleAdminSettingsPost);
+  webServer.on("/admin/reboot", HTTP_POST, handleAdminRebootPost);
+  webServer.on("/admin/sleep", HTTP_POST, nullHandler, NULL, handleAdminSleepPost);
+  webServer.on("/admin/factory-reset", HTTP_POST, handleAdminResetPost);
   webServer.onNotFound(handleNotFound);
+  webServer.onRequestBody(handleRequestBody);   
 
   webServer.begin();
   Serial.println("HTTP web server started");
 }
 
 void handleClient() {
-  webServer.handleClient();
+  //webServer.handleClient();
 }
 
-void handleHome() {
-  if (webServer.method() == HTTP_GET) {
+void nullHandler(AsyncWebServerRequest *request) { }
+
+void handleHomeGet(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
     Serial.println("Handle GET /");
-    webServer.send(200, "text/html", indexHtml);
+    request->send_P(200, "text/html", indexHtml, NULL);
   }
 }
 
-void handleResources() {
-  if (webServer.method() == HTTP_GET) {
+void handleResourcesGet(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
     Serial.println("Handle GET /resources");
-    String resourceId = webServer.pathArg(0);
+    if (!request->hasParam("id")) {
+      request->send(400, "application/json", "resource not specified");
+      return;
+    }
+    String resourceId = request->getParam("id")->value();
     Serial.println("Resouce id: " + resourceId);
     long resourceSize;
     const unsigned char* resource = getImageResourceFromId(resourceId, resourceSize);
     if (resource != NULL) {
-      webServer.sendHeader("Cache-Control", "max-age=84600", false); // 24h suggested cache
-      webServer.send(200, "image/png", resource, resourceSize);
+      auto response = request->beginResponse_P(200, "image/png", resource, resourceSize, NULL);
+      response->addHeader("Cache-Control", "max-age=84600"); // 24h suggested cache
+      request->send(response);
     } else {
-      webServer.send(404, "text/plain", "resource not found!");
+      request->send(404, "text/plain", "resource not found!");
     }
   }
 }
 
-void handleStatus() {
-  if (webServer.method() == HTTP_GET) {
-    Serial.println("Handle GET /status");
+void handleStatusGet(AsyncWebServerRequest *request) {
+  Serial.println("Handle GET /status");
 
-    String message = getSignStatus();
-    Serial.println("GET Response");
-    Serial.println(message);
+  String message = getSignStatus();
+  Serial.println("GET Response");
+  Serial.println(message);
 
-    webServer.send(200, "application/json", message);
-  } else {
-    Serial.println("Handle POST /status");
-    if (!webServer.hasArg("plain")) {
-      webServer.send(400, "application/json", "no body");
-      return;
-    }
-    
-    String body = webServer.arg("plain");
-    Serial.println("Request body: " + body);
-    ParsingResult err = setSignStatus(body);
-    switch (err) {
-      case PARSE_SUCCESS: 
-        webServer.send(200, "application/json", "successfully updated sign panels");
-        break;
-      case JSON_PARSING_ERROR:
-        webServer.send(400, "application/json", "invalid payload");
-        break;
-      case JSON_MISSING_PANELS_FIELD:
-      case JSON_MISSING_NAME_FIELD:
-      case JSON_MISSING_STATE_FIELD:
-        webServer.send(400, "application/json", "missing required field");
-      default:
-        webServer.send(500, "application/json", "unknown exception"); 
-        break;
-    }
+  request->send(200, "application/json", message);
+}
+
+void handleStatusPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  Serial.println("Handle POST /status");
+  if (!request->hasParam("body", true)) {
+    request->send(400, "application/json", "no body");
+    return;
+  }
+  String body = request->getParam("body", true)->value();
+  Serial.println("Request body: " + body);
+  ParsingResult err = setSignStatus(body);
+  switch (err) {
+    case PARSE_SUCCESS: 
+      request->send(200, "application/json", "successfully updated sign panels");
+      break;
+    case JSON_PARSING_ERROR:
+      request->send(400, "application/json", "invalid payload");
+      break;
+    case JSON_MISSING_PANELS_FIELD:
+    case JSON_MISSING_NAME_FIELD:
+    case JSON_MISSING_STATE_FIELD:
+      request->send(400, "application/json", "missing required field");
+    default:
+      request->send(500, "application/json", "unknown exception"); 
+      break;
   }
 }
 
-void handleAdminDevice() {
-  if (webServer.method() == HTTP_GET) {
+void handleAdminDeviceGet(AsyncWebServerRequest *request) {
+  if (request->method() == HTTP_GET) {
     Serial.println("Handle GET /admin/device");
     String message = getDeviceInformation();
     Serial.println("GET Response");
     Serial.println(message);
-    webServer.send(200, "application/json", message);
-  } else {
-    Serial.println("Handle POST /admin/device");
-    if (!webServer.hasArg("plain")) {
-      webServer.send(400, "application/json", "no body");
-      return;
-    }
-    String body = webServer.arg("plain");
-    Serial.println("Request body: " + body);
-
-    PostResult result = setDeviceInformation(body);
-
-    switch (result) {
-      case POST_SUCCESS:
-        webServer.send(200, "text/html", "device information updated successfully!");
-        break;
-      case BAD_REQUEST:
-        webServer.send(400, "text/plain", "bad request");
-        break;
-      case SERVER_ERROR:
-      default:
-        webServer.send(500, "text/plain", "unknown server error");
-        break;
-    }
+    request->send(200, "application/json", message);
   }
 }
 
-void handleAdminWifi() {
-  if (webServer.method() == HTTP_GET) {
-    Serial.println("Handle GET /admin/wifi");
-    String message = getWifiConfig();
-    Serial.println("GET Response");
-    Serial.println(message);
-    webServer.send(200, "application/json", message);
-  } else {
-    Serial.println("Handle POST /admin/wifi");
-    if (!webServer.hasArg("plain")) {
-      webServer.send(400, "application/json", "no body");
-      return;
-    }
-    String body = webServer.arg("plain");
-    Serial.println("Request body: " + body);
+void handleAdminDevicePost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  Serial.println("Handle POST /admin/device");
+  if (!request->hasParam("body", true)) {
+    request->send(400, "application/json", "no body");
+    return;
+  }
+  String body = request->getParam("body", true)->value();
+  Serial.println("Request body: " + body);
 
-    PostResult result = setWifiConfig(body);
+  PostResult result = setDeviceInformation(body);
 
-    switch (result) {
-      case POST_SUCCESS:
-        webServer.send(200, "text/html", "Wifi config updated successfully! Device will reboot now...");
-        delay(5000);
-        reboot();
-        break;
-      case BAD_REQUEST:
-        webServer.send(400, "text/plain", "bad request");
-        break;
-      case SERVER_ERROR:
-      default:
-        webServer.send(500, "text/plain", "unknown server error");
-        break;
-    }
+  switch (result) {
+    case POST_SUCCESS:
+      request->send(200, "text/html", "device information updated successfully!");
+      break;
+    case BAD_REQUEST:
+      request->send(400, "text/plain", "bad request");
+      break;
+    case SERVER_ERROR:
+    default:
+      request->send(500, "text/plain", "unknown server error");
+      break;
   }
 }
 
-void handleAdminSettings() {
-  if (webServer.method() == HTTP_GET) {
-    Serial.println("Handle GET /admin/settings");
-    String message = getUserSettings();
-    Serial.println("GET Response");
-    Serial.println(message);
-    webServer.send(200, "application/json", message);
-  } else {
-    Serial.println("Handle POST /admin/settings");
-    if (!webServer.hasArg("plain")) {
-      webServer.send(400, "application/json", "no body");
-      return;
-    }
-    String body = webServer.arg("plain");
-    Serial.println("Request body: " + body);
+void handleAdminWifiGet(AsyncWebServerRequest *request) {
+  Serial.println("Handle GET /admin/wifi");
+  String message = getWifiConfig();
+  Serial.println("GET Response");
+  Serial.println(message);
+  request->send(200, "application/json", message);
+}
 
-    PostResult result = setUserSettings(body);
+void handleAdminWifiPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  Serial.println("Handle POST /admin/wifi");
+  if (!request->hasParam("body", true)) {
+    request->send(400, "application/json", "no body");
+    return;
+  }
+  String body = request->getParam("body", true)->value();
+  Serial.println("Request body: " + body);
 
-    switch (result) {
-      case POST_SUCCESS:
-        webServer.send(200, "text/html", "user settings updated successfully!");
-        break;
-      case BAD_REQUEST:
-        webServer.send(400, "text/plain", "bad request");
-        break;
-      case SERVER_ERROR:
-      default:
-        webServer.send(500, "text/plain", "unknown server error");
-        break;
-    }
+  PostResult result = setWifiConfig(body);
+
+  switch (result) {
+    case POST_SUCCESS:
+      request->send(200, "text/html", "Wifi config updated successfully! Device will reboot now...");
+      delay(5000);
+      reboot();
+      break;
+    case BAD_REQUEST:
+      request->send(400, "text/plain", "bad request");
+      break;
+    case SERVER_ERROR:
+    default:
+      request->send(500, "text/plain", "unknown server error");
+      break;
   }
 }
 
-void handleAdminReboot() {
+void handleAdminWifiScanGet(AsyncWebServerRequest *request) {
+  int n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_FAILED) {
+    WiFi.scanNetworks(true);
+    request->send(202, "application/json", "wifi scan started");
+  } else if (n == WIFI_SCAN_RUNNING) {
+    request->send(202, "application/json", "wifi scan is still running");
+    return;
+  } else {
+    String json = "[";
+    for (int i = 0; i < n; ++i){
+      if(i) json += ",";
+      json += "{";
+      json += "\"rssi\":"+String(WiFi.RSSI(i));
+      json += ",\"ssid\":\""+WiFi.SSID(i)+"\"";
+      json += ",\"bssid\":\""+WiFi.BSSIDstr(i)+"\"";
+      json += ",\"channel\":"+String(WiFi.channel(i));
+      json += ",\"secure\":"+String(WiFi.encryptionType(i));
+      json += "}";
+    }
+    json += "]";
+    WiFi.scanDelete();
+    request->send(200, "application/json", json);
+  }
+}
+
+void handleAdminSettingsGet(AsyncWebServerRequest *request) {
+  Serial.println("Handle GET /admin/settings");
+  String message = getUserSettings();
+  Serial.println("GET Response");
+  Serial.println(message);
+  request->send(200, "application/json", message);
+}
+void handleAdminSettingsPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  Serial.println("Handle POST /admin/settings");
+  if (!request->hasParam("body", true)) {
+    request->send(400, "application/json", "no body");
+    return;
+  }
+  String body = request->getParam("body", true)->value();
+  Serial.println("Request body: " + body);
+
+  PostResult result = setUserSettings(body);
+
+  switch (result) {
+    case POST_SUCCESS:
+      request->send(200, "text/html", "user settings updated successfully!");
+      break;
+    case BAD_REQUEST:
+      request->send(400, "text/plain", "bad request");
+      break;
+    case SERVER_ERROR:
+    default:
+      request->send(500, "text/plain", "unknown server error");
+      break;
+  }
+}
+
+void handleAdminRebootPost(AsyncWebServerRequest *request) {
   Serial.println("Handle POST /admin/reboot");
-  webServer.send(200, "text/plain", "rebooting device...\n\n");
+  request->send(200, "text/plain", "rebooting device...\n\n");
   delay(2000);
   reboot();
 }
 
-void handleAdminSleep() {
+void handleAdminSleepPost(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
   Serial.println("Handle POST /admin/sleep");
 
   long sleepTimeInMinutes = 0;
-  if (webServer.hasArg("plain")) {
-    String body = webServer.arg("plain");
+  if (request->hasParam("body", true)) {
+    String body = request->getParam("body", true)->value();
     Serial.println("Request body: " + body);
 
     bool valid = parseJsonIntField(body, "value", sleepTimeInMinutes);
     if (!valid) {
-      webServer.send(400, "text/plain", "bad request");
+      request->send(400, "text/plain", "bad request");
       return;
     }
   }
 
-  webServer.send(200, "text/plain", "sleeping device...\n\n");
+  request->send(200, "text/plain", "sleeping device...\n\n");
   delay(2000);
   deepSleep(sleepTimeInMinutes);
 }
 
-void handleAdminReset() {
+void handleAdminResetPost(AsyncWebServerRequest *request) {
   Serial.println("Handle /admin/factory-reset");
   factoryReset(false);
-  webServer.send(200, "text/plain", "Successfuly reset to factory default! Device will reboot now...\n\n");
+  request->send(200, "text/plain", "Successfuly reset to factory default! Device will reboot now...\n\n");
   delay(2000);
   reboot();
 }
 
-void handleNotFound() {
-  Serial.println(F("Handle not found"));
-  String message = printRequestArgs();
-  webServer.send(404, "text/plain", message);
+void handleNotFound(AsyncWebServerRequest *request) {
+  String body = (request->hasParam("body", true)) ? request->getParam("body", true)->value() : String();
+  Serial.println("handleNotFound body: " + body);
+  if (fauxmo.process(request->client(), request->method() == HTTP_GET, request->url(), body)) {
+    return;
+  }
+  Serial.println("Handle not found: " + request->url());
+  String message = printRequestArgs(request);
+  request->send(404, "text/plain", message);
 }
 
-String printRequestArgs() {
-  String message = HttpMethodToString(webServer.method()) + " args were:\n";
+void handleRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+  String body = (request->hasParam("body", true)) ? request->getParam("body", true)->value() : String();
+  Serial.println("handleRequestBody body: " + body);
+  if (fauxmo.process(request->client(), request->method() == HTTP_GET, request->url(), body)) {
+    return;
+  }
+}
+
+String printRequestArgs(AsyncWebServerRequest *request) {
+  String message = httpMethodToString(request->method()) + " args were:\n";
   message += "URI: ";
-  message += webServer.uri();
+  message += request->url();
   message += "\nArguments: ";
-  message += webServer.args();
+  message += request->params();
   message += "\n";
-  for (uint8_t i = 0; i < webServer.args(); i++) {
-    message += " " + webServer.argName(i) + ": " + webServer.arg(i) + "\n";
+  for (uint8_t i = 0; i < request->params(); i++) {
+    message += " " + request->getParam(i)->name() + ": " + request->getParam(i)->value() + "\n";
   }
   Serial.print(message);
   return message;
 }
 
-String HttpMethodToString(const HTTPMethod method) {
+String httpMethodToString(const WebRequestMethodComposite method) {
   switch (method) {
     case HTTP_GET:
       return "GET";

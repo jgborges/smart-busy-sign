@@ -2,6 +2,8 @@
 #define ON LOW
 #define OFF HIGH
 
+#define MAC_ADDR_LENGTH 6
+
 const char* hostname = "smart-busy-sign";
 
 void setupWifi() {
@@ -13,13 +15,17 @@ void setupWifi() {
   String macAddr = WiFi.macAddress();
   Serial.println("Mac Address: " + macAddr);
   bool isConnected = false;
-  if (wifiConfig.mode == WIFI_STA) {
-    isConnected = setupSTA(wifiConfig.ssid, wifiConfig.psk);
-  }
 
-  if (wifiConfig.mode == WIFI_AP) {
-    setupAP(wifiConfig.ssid, wifiConfig.psk);
-    isConnected = true;
+  WiFiMode_t mode;
+  String ssid, psk;
+  if (getWifiConfig(mode, ssid, psk)) {
+    if (mode == WIFI_STA) {
+      isConnected = setupSTA(ssid, psk);
+    }
+    if (mode == WIFI_AP) {
+      setupAP(ssid, psk);
+      isConnected = true;
+    }
   }
 
   if (!isConnected) {
@@ -36,23 +42,10 @@ void setupWifi() {
     Serial.println(WiFi.localIP());
   }
 
-  // Set up mDNS responder:
-  // - argument is the domain name set to hostname, resulting in 
-  //   the fully-qualified domain name "<hostname>.local"
-  if (!MDNS.begin(hostname)) {
-    Serial.println("Error setting up MDNS responder!");
-  }
-  Serial.println(F("mDNS responder started"));
-
-  // Set up NetBIOS responder:
-  // - argument is the hostname
-  if (!NBNS.begin(hostname)) {
-    Serial.println("Error setting up NetBIOS!");
-  }
-  Serial.println(F("NetBIOS started"));
+  setupMDNS();
 }
 
-bool setupSTA(const char* ssid, const char* psk) {
+bool setupSTA(String ssid, String psk) {
   // Connect to WiFi network
   Serial.print("Connecting to '" + String(ssid) + " (STA)'...");
   
@@ -89,24 +82,54 @@ void setupAP(String ssid, String psk) {
   WiFi.mode(WIFI_AP);
   WiFi.hostname(hostname);
   WiFi.softAP(ssid, psk);
+#if defined(ESP8266)
   WiFi.onEvent(onWifiClientConnected, WIFI_EVENT_SOFTAPMODE_STACONNECTED);
+#endif
 
-
-  digitalWrite(LED_BUILTIN_AUX, OFF); // keep LED off to indicate successful connection
+  digitalWrite(LED_BUILTIN, OFF); // keep LED off to indicate successful connection
   Serial.println(F("connected!"));
 }
 
+void setupMDNS() {
+  // Set up mDNS responder:
+  // - argument is the domain name set to hostname, resulting in 
+  //   the fully-qualified domain name "<hostname>.local"
+  if (!MDNS.begin(hostname)) {
+    Serial.println("Error setting up mDNS responder!");
+  } else {
+    Serial.println(F("mDNS responder started"));
+  }
+
+#if defined(ESP32)
+    // Add service to MDNS-SD
+    MDNS.addService("http", "tcp", 80);
+#endif
+
+  // Set up NetBIOS responder:
+  // - argument is the hostname
+  if (!NBNS.begin(hostname)) {
+    Serial.println("Error setting up NetBIOS!");
+  }
+  Serial.println(F("NetBIOS started"));
+}
+
+void handleMDNS() {
+  MDNS.update();
+}
+
+#if defined(ESP8266)
 void onWifiClientConnected(WiFiEvent_t event) {
   Serial.println("Client connected!");
 }
+#endif
 
 String getMacAddress(String separator) {
-  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  uint8_t mac[MAC_ADDR_LENGTH];
   WiFi.softAPmacAddress(mac);
   String macID = "";
-  for (int i=0; i < WL_MAC_ADDR_LENGTH; i++) {
+  for (int i=0; i < MAC_ADDR_LENGTH; i++) {
     macID += String(mac[i], HEX);
-    if (i < (WL_MAC_ADDR_LENGTH - 1)) {
+    if (i < (MAC_ADDR_LENGTH - 1)) {
       macID += separator;
     }
   }

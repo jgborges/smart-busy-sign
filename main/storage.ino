@@ -10,15 +10,63 @@
 #define MIN_TZ_OFFSET -11*60
 #define MAX_AUTO_TURNOFF_PERIOD (ushort)(24*60)
 
-DeviceInfo devInfo = {};
-WifiConfig wifiConfig = {};
-Settings settings = {};
-
 #define STORAGE_SIZE    4096.
 #define STORAGE_BLOCK   512
 #define DEVICE_INFO_POS 0*STORAGE_BLOCK
 #define WIFI_CONFIG_POS 1*STORAGE_BLOCK
 #define SETTINGS_POS    2*STORAGE_BLOCK
+
+
+// permanent sign information
+
+struct PanelInfo {
+  bool enabled;
+  char name[25];
+  LedTypes led;
+  LedSetup pin;
+};
+
+struct DeviceInfo {
+  char signModel[36];
+  char serialNumber[26];
+  char manufacturingDate[26];
+  PanelInfo panels[MAX_PINS];
+  byte setValue; // make it last field so any change will invalidate the whole struct
+
+  bool isSet() {
+    return this->setValue == EEPROM_SET;
+  }
+};
+
+// wifi connection information
+
+struct WifiConfig {
+  WiFiMode_t mode;
+  char ssid[33]; // ssd can be 32 char at most
+  char psk[63];  // psk can be 62 char at most
+  byte setValue; // make it last field so any change will invalidate the whole struct
+
+  bool isWifiSet() {
+    return this->setValue == EEPROM_SET;
+  }
+
+  String modeAsString() {
+    if (this->mode == WIFI_STA) {
+      return "sta";
+    } else if (this->mode == WIFI_AP) {
+      return "ap";
+    } else if (this->mode == WIFI_OFF) {
+      return "off";
+    } else {
+      return "unknown";
+    }
+  }
+};
+
+
+DeviceInfo devInfo = {};
+WifiConfig wifiConfig = {};
+Settings settings = {};
 
 void setupStorage() {
   loadDeviceInformation();
@@ -38,6 +86,12 @@ void loadDeviceInformation() {
     strncpy(devInfo.signModel, "smart-busy-sign", sizeof(devInfo.signModel));
     strncpy(devInfo.serialNumber, "0000000001", sizeof(devInfo.serialNumber));
     strncpy(devInfo.manufacturingDate, "2023-06-01", sizeof(devInfo.manufacturingDate));
+    for (byte gpio=0; gpio < MAX_PINS; gpio++) {
+      devInfo.panels[gpio].enabled = false;
+      devInfo.panels[gpio].led = WHITE;
+      devInfo.panels[gpio].pin = { gpio, true };
+      strncpy(devInfo.panels[gpio].name, (String("Panel") + String(gpio)).c_str(), sizeof(devInfo.panels[gpio].name));
+    }
   } else {
     Serial.println("Done");
   }
@@ -58,10 +112,14 @@ String getDeviceInformation() {
   doc["timestamp"] = getEpochTime();
   doc["uptime"] = getUptime();
   doc["inactiveTime"] = getInactiveTime();
+#if defined(ESP8266)
   doc["inputVoltage"] = ESP.getVcc()/1000.0;
+#endif
   DynamicJsonDocument memory(300); 
+#if defined(ESP8266)
   memory["freHeapSize"] = ESP.getMaxFreeBlockSize();
   memory["heapFragmentation"] = ESP.getHeapFragmentation();
+#endif
   memory["sketchSize"] = ESP.getSketchSize();
   memory["freeSketchSize"] = ESP.getFreeSketchSpace();
   doc["memory"] = memory;
@@ -145,6 +203,13 @@ void loadWifiConfig() {
   Serial.println(" mode: " + wifiConfig.modeAsString());
   Serial.println(" ssid: " + String(wifiConfig.ssid));
   Serial.println(" psk: " + String(wifiConfig.psk));
+}
+
+bool getWifiConfig(WiFiMode_t& mode, String& ssid, String& psk) {
+  mode = wifiConfig.mode;
+  ssid = String(wifiConfig.ssid);
+  psk = String(wifiConfig.psk);
+  return true;
 }
 
 String getWifiConfig() {
@@ -396,4 +461,81 @@ void factoryReset(bool fullReset) {
   }
   EEPROM.end();
   Serial.println("Done");
+}
+
+DayOfWeek stringToDayOfWeek(String day) {
+  day.toLowerCase();
+  if (day.equals("sunday")) {
+    return SUNDAY;
+  } else if (day.equals("monday")) {
+    return MONDAY;
+  } else if (day.equals("tuesday")) {
+    return TUESDAY;
+  } else if (day.equals("wednesday")) {
+    return WEDNESDAY;
+  } else if (day.equals("thursday")) {
+    return THURSDAY;
+  } else if (day.equals("friday")) {
+    return FRIDAY;
+  } else if (day.equals("saturday")) {
+    return SATURDAY;
+  } else {
+    return NONE;
+  }
+}
+
+String singleDayOfWeekToString(DayOfWeek day) {
+  switch (day) {
+    case SUNDAY:
+      return "sunday";
+    case MONDAY:
+      return "monday";
+    case TUESDAY:
+      return "tuesday";
+    case WEDNESDAY:
+      return "wednesday";
+    case THURSDAY:
+      return "thursday";
+    case FRIDAY:
+      return "friday";
+    case SATURDAY:
+      return "saturday";
+    default:
+      return "unknown";
+  }
+}
+
+String dayOfWeekToString(DayOfWeek day) {
+  switch (day) {
+    case SUNDAY:
+      return "sunday";
+    case MONDAY:
+      return "monday";
+    case TUESDAY:
+      return "tuesday";
+    case WEDNESDAY:
+      return "wednesday";
+    case THURSDAY:
+      return "thursday";
+    case FRIDAY:
+      return "friday";
+    case SATURDAY:
+      return "saturday";
+    case ALL_DAYS:
+      return "all week";
+    case WEEKDAY:
+      return "weekdays";
+    case WEEKEND:
+      return "weekend";
+    case NONE:
+      return "no days";
+    default:
+      String out = "";
+      for (auto& d : AllDaysOfWeek) {
+        if ((d & day) > 0) {
+          out += singleDayOfWeekToString(d) + ",";
+        }
+      }
+      return out;
+  }
 }

@@ -1,3 +1,6 @@
+#ifndef INDEX_HTML_H
+#define INDEX_HTML_H
+
 const char *indexHtml = R"====(
 <html>
   <head>
@@ -30,6 +33,27 @@ const char *indexHtml = R"====(
         -webkit-animation: blink 1.5s linear infinite;
         -moz-animation: blink 1.5s linear infinite;
         animation: blink 1.5s step-start 0s infinite;
+      }
+      .popup {
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.4);
+        display: none;
+      }
+      .popup-content {
+        background-color: white;
+        margin: 10% auto;
+        padding: 20px;
+        border: 1px solid #888888;
+        width: 20%;
+      }
+      .show {
+        display: block;
       }
     </style>
   </head>
@@ -85,7 +109,15 @@ const char *indexHtml = R"====(
         </tr>
         <tr>
           <td><label for="ssid">Network Name (SSID)</label></td>
-          <td><input style="font-family:monospace" type="text" id="ssid" name="ssid" value="" maxlength="32"></td>
+          <td><input style="font-family:monospace" type="text" id="ssid" name="ssid" value="" maxlength="32"> <button type="button" id="wifi-scan">Scan</button> 
+            <div id="ssidList" class="popup">
+              <div class="popup-content">
+                <h4>Available WiFi networks:</h4>
+                <select name="selected-ssid" size="16" style="width:100%;"></select><p>
+                <button type="button" id="wifi-select">Select</button> <button type="button" id="wifi-refresh">Refresh</button>
+              </div>
+            </div>
+          </td>
         </tr>
         <tr>
           <td><label for="psk">Pre-shared Key (Password)</label></td>
@@ -160,8 +192,26 @@ const char *indexHtml = R"====(
       loadWifiConfig();
       loadUserSettings();
 
+      // setup config form buttons
       document.querySelector("#wifi").addEventListener("submit", updateWifiConfig);
       document.querySelector("#settings").addEventListener("submit", updateUserSettings);
+
+      // setup wifi scan buttons
+      const ssidList = document.querySelector("#ssidList");
+      document.querySelector("#wifi-scan").addEventListener("click", showWifiList);
+      document.querySelector("#wifi-refresh").addEventListener("click", showWifiList);
+      document.querySelector("#wifi-select").addEventListener("click", () => {
+        const wifi = document.querySelector("#ssidList > div.popup-content > select");
+        if (!!wifi.value) {
+          document.querySelector("#ssid").value = wifi.value;
+          ssidList.classList.remove("show");
+        }
+      });
+      window.addEventListener("click", (event) => {
+        if (event.target == ssidList) {
+          ssidList.classList.remove("show");
+        }
+      });
     }
 
     function togglePassword() {
@@ -296,6 +346,40 @@ const char *indexHtml = R"====(
       }
     }
 
+    async function showWifiList() {
+      const list = await fetchWifiList();
+      if (list == null) {
+        alert("Could not fetch list of WiFi networks. Try again");
+        return;
+      }
+      document.querySelector("#ssidList > div.popup-content > select").innerHTML = list.map(ssid => `<option value="${ssid}">${ssid}</option>`).join('\n');
+      document.querySelector("#ssidList").classList.add("show");
+    }
+
+    async function fetchWifiList() {
+      console.info("Fetching Wifi Configuration...");
+      const response = await fetch('/admin/scan', {
+        method: 'GET',
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      } else if (response.status == 202) {
+        await wait(3000);
+        return await fetchWifiList();
+      } else {
+        const data = await response.json()
+        return [...new Set(
+          data
+            .sort((a, b) => b.rssi - a.rssi)
+            .map(item => item.ssid)
+        )];
+      }
+    }
+
     async function updateUserSettings(e) {
       e.preventDefault();
 
@@ -374,6 +458,10 @@ const char *indexHtml = R"====(
       });
     }
 
+    function wait(time) {
+      return new Promise((resolve) => setTimeout(resolve, time))
+    }
+
     async function reboot() {
       console.info("Rebooting device...");
       const response = await post('/admin/reboot');
@@ -400,3 +488,5 @@ const char *indexHtml = R"====(
   </script>
 </html>
 )====";
+
+#endif
