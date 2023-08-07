@@ -1,6 +1,8 @@
 #ifndef STORAGE_H
 #define STORAGE_H
 
+#include "defines.h"
+
 #ifndef AP_SSID
 #define AP_SSID "Smart-Busy-Sign"
 #define AP_PSK "smartsign"

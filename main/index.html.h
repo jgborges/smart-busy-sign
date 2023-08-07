@@ -449,9 +449,8 @@ const char *indexHtml = R"====(
     async function post(url, data = {}) {
       return await fetch(url, {
         method: 'POST',
-        redirect: 'manual',
         headers: {
-          Accept: 'application.json',
+          'Accept': 'application/json, text/plain, */*',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(data),

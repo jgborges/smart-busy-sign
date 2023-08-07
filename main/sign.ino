@@ -41,7 +41,8 @@
 
 */
 
-#include "defines.h"
+#include "sign.h"
+
 #define SIGN_SN_DEFAULT 10001
 
 #define SIGN_MODEL "smart-busy-sign_V0"
@@ -49,40 +50,13 @@
 
 #define RESET_GPIO D6
 
-struct PanelStatus {
-  String name;
-  PanelState state;
-  String color;
-  byte intensity;
-  ushort ttl;
-};
-
-const std::map<LedTypes, String> LedToColor = {
-  { WHITE, "white" },
-  { YELLOW, "yellow" },
-  { RED, "red" },
-  { GREEN, "green" },
-  { BLUE, "blue" },
-  { RGB_RED, "#FF0000" },
-  { RGB_GREEN, "#FF0000" },
-  { RGB_BLUE, "#FF0000" },
-};
-
-const std::map<String, LedTypes> ColorToLed = {
-  { "white", WHITE },
-  { "yellow", YELLOW },
-  { "red", RED },
-  { "green", GREEN },
-  { "blue", BLUE },
-};
-
 // initialize with default panel setup
 const PanelSetupMap panelSetupMap = {
-  { "busy",           { {WHITE,    {D3,CATHODE_CONTROL_LED}} }}, 
+  { "busy",           { {WHITE,    {D1,ANODE_CONTROL_LED}} }}, 
   //                    {RED,      {D3,CATHODE_CONTROL_LED}} }},
-  { "camera",         { {YELLOW,   {D5,CATHODE_CONTROL_LED}} }},
-  { "microphone",     { {YELLOW,   {D6,CATHODE_CONTROL_LED}} }},
-  { "do-not-disturb", { {RED,      {D7,CATHODE_CONTROL_LED}} }}
+  { "camera",         { {YELLOW,   {D2,CATHODE_CONTROL_LED}} }},
+  { "microphone",     { {YELLOW,   {D3,CATHODE_CONTROL_LED}} }},
+  { "do-not-disturb", { {RED,      {D5,CATHODE_CONTROL_LED}} }}
   //{ "alert",        { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
   //                    {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
   //                    {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}

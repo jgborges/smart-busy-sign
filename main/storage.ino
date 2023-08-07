@@ -1,3 +1,4 @@
+#include "storage.h"
 #include <EEPROM.h>
 
 #ifndef AP_SSID
@@ -15,54 +16,6 @@
 #define DEVICE_INFO_POS 0*STORAGE_BLOCK
 #define WIFI_CONFIG_POS 1*STORAGE_BLOCK
 #define SETTINGS_POS    2*STORAGE_BLOCK
-
-
-// permanent sign information
-
-struct PanelInfo {
-  bool enabled;
-  char name[25];
-  LedTypes led;
-  LedSetup pin;
-};
-
-struct DeviceInfo {
-  char signModel[36];
-  char serialNumber[26];
-  char manufacturingDate[26];
-  PanelInfo panels[MAX_PINS];
-  byte setValue; // make it last field so any change will invalidate the whole struct
-
-  bool isSet() {
-    return this->setValue == EEPROM_SET;
-  }
-};
-
-// wifi connection information
-
-struct WifiConfig {
-  WiFiMode_t mode;
-  char ssid[33]; // ssd can be 32 char at most
-  char psk[63];  // psk can be 62 char at most
-  byte setValue; // make it last field so any change will invalidate the whole struct
-
-  bool isWifiSet() {
-    return this->setValue == EEPROM_SET;
-  }
-
-  String modeAsString() {
-    if (this->mode == WIFI_STA) {
-      return "sta";
-    } else if (this->mode == WIFI_AP) {
-      return "ap";
-    } else if (this->mode == WIFI_OFF) {
-      return "off";
-    } else {
-      return "unknown";
-    }
-  }
-};
-
 
 DeviceInfo devInfo = {};
 WifiConfig wifiConfig = {};

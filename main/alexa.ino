@@ -8,10 +8,9 @@ void setupAlexa() {
   fauxmo.setPort(80); // required for gen3 devices
 
   fauxmo.addDevice("busy");
-  fauxmo.setDeviceUniqueId(fauxmo.getDeviceId("busy"), "panel_busy_0");
-  //fauxmo.addDevice("camera");
-  //fauxmo.addDevice("mic");
-  //fauxmo.addDevice("do-not-disturb");
+  fauxmo.addDevice("camera");
+  fauxmo.addDevice("mic");
+  fauxmo.addDevice("do-not-disturb");
   fauxmo.enable(true);
 
   Serial.println("Done");
