@@ -35,14 +35,13 @@ void setup() {
   setupStorage();
   setupWifi();
   setupWebServer();
+  setupAlexaDevices();
   setupTime();
-  setupAlexa();
 }
 
 void loop() {
   handleMDNS();
   handleSleep();
-  handleClient();
   handleBlinking();
   handleTTL();
   handleAlexa();

@@ -72,7 +72,7 @@ void setupSign() {
 
   buildStatusMap(panelSetupMap);
   // appy default sign status
-  applySignStatus(); // turn all of as gpios are initiated in DISABLED state
+  applySignStatus(); // turn all off as gpios are initiated in DISABLED state
 
   lastTTLCheck = millis();
 }
@@ -98,7 +98,6 @@ void setupSign() {
 
 void buildStatusMap(const PanelSetupMap& panelSetup) {
   statusMap.clear();
-  int numOfPanels = 0;
   for (auto& item: panelSetup) {
     String name = item.first;
     LedTypes firstLed = item.second.begin()->first;
@@ -106,8 +105,16 @@ void buildStatusMap(const PanelSetupMap& panelSetup) {
     if (isLedRGB(firstLed)) {
       color = "#FFFFFF"; // equivalent to white
     }
-    PanelStatus pstatus = { name, PANEL_OFF, color, 255 };
-    statusMap.insert(std::pair<String, PanelStatus>(name, pstatus));
+    statusMap.insert(std::pair<String, PanelStatus>(name, { name, PANEL_OFF, color, 255 }));
+  }
+}
+
+void getDeviceMap(std::map<String, bool>& deviceMap) {
+  deviceMap.clear();
+  for (auto& item: panelSetupMap) {
+    String name = item.first;
+    LedTypes firstLed = item.second.begin()->first;
+    deviceMap.insert({ name, isLedRGB(firstLed) });
   }
 }
 
@@ -174,6 +181,8 @@ void applySignStatus(PanelStatus panel) {
     setLightState(g_gpio, state, g);
     byte b_gpio = panelSetupMap.at(name).at(RGB_BLUE).gpio;
     setLightState(b_gpio, state, b);
+
+    updateAlexaDevice(name, !isOff(state), intensity, (byte)r, (byte)g, (byte)b);
     return;
   }
 
@@ -195,6 +204,7 @@ void applySignStatus(PanelStatus panel) {
     } else {
       setLightState(gpio, PANEL_OFF, intensity);
     }
+    updateAlexaDevice(name, !isOff(state), intensity);
   }
 }
 

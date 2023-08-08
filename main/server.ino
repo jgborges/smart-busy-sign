@@ -83,13 +83,11 @@ void setupWebServer() {
   webServer.on("/admin/factory-reset", HTTP_POST, handleAdminResetPost);
   webServer.onNotFound(handleNotFound);
   webServer.onRequestBody(handleRequestBody);   
-
+  
   webServer.begin();
   Serial.println("HTTP web server started");
-}
 
-void handleClient() {
-  //webServer.handleClient();
+  setupAlexaWebServer(&webServer);
 }
 
 void handleRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -339,13 +337,10 @@ void handleAdminResetPost(AsyncWebServerRequest *request) {
 }
 
 void handleNotFound(AsyncWebServerRequest *request) {
-  Serial.println("Handle not found: " + request->url());
-  String body = "";
-  getPostBody(request, body);
-  if (fauxmo.process(request->client(), request->method() == HTTP_GET, request->url(), body)) {
-    Serial.println("Successfully processed Fauxmo request");
+  if (handleAlexaRequest(request)) {
     return;
   }
+  Serial.println("Handle not found: " + request->url());
   String message = printRequestArgs(request);
   request->send(404, "text/plain", message);
 }

@@ -1,25 +1,93 @@
-#include <fauxmoESP.h>
+#define ESPALEXA_ASYNC
+#include <Espalexa.h>
+#include <EspalexaDevice.h>
+#include <ESPAsyncWebSrv.h>
+#include "defines.h"
 
-fauxmoESP fauxmo;
+Espalexa espalexa;
+bool alexaInitialized = false; // prevents sign updates to try to call Alexa before WiFi is initialized
 
-void setupAlexa() {
-  Serial.println("Initializing Alexa support...");
-  fauxmo.createServer(false);
-  fauxmo.setPort(80); // required for gen3 devices
+std::map<String, EspalexaDevice*> alexaDeviceMap = { };
 
-  fauxmo.addDevice("busy");
-  fauxmo.addDevice("camera");
-  fauxmo.addDevice("mic");
-  fauxmo.addDevice("do-not-disturb");
-  fauxmo.enable(true);
+void setupAlexaWebServer(AsyncWebServer* server);
+void addAlexaDevice(String deviceName, EspalexaDeviceType devType);
+bool handleAlexaRequest(AsyncWebServerRequest *request);
+void alexaStateChanged(EspalexaDevice* dev);
 
-  Serial.println("Done");
+void setupAlexaWebServer(AsyncWebServer* server) {
+  espalexa.begin(server);
+  alexaInitialized = true;
+  Serial.println("Alexa server initialized");
+}
 
-  fauxmo.onSetState([](unsigned char device_id, const char* device_name, bool state, unsigned char value) {
-      Serial.printf("[MAIN] Device #%d (%s) state: %s value: %d\n", device_id, device_name, state ? "ON" : "OFF", value);
-  });
+void setupAlexaDevices() {
+  Serial.println("Creating Alexa devices")
+  std::map<String, bool> deviceMap;
+  getDeviceMap(deviceMap);
+
+  alexaDeviceMap.clear();
+  for (auto& item: deviceMap) {
+    String name = item.first;
+    bool isRGB = item.second;
+    EspalexaDeviceType devType = isRGB ? EspalexaDeviceType::color : EspalexaDeviceType::dimmable;
+    addAlexaDevice(name, devType);
+  }
+}
+
+void addAlexaDevice(String deviceName, EspalexaDeviceType devType) {
+  EspalexaDevice* dev = new EspalexaDevice(deviceName, alexaStateChanged, devType);
+  if (espalexa.addDevice(dev)) {
+    alexaDeviceMap.insert({ deviceName, dev });
+    Serial.println(" device created: name=" + dev->getName() + ", id=" + String(dev->getId()));
+  }
+}
+
+bool handleAlexaRequest(AsyncWebServerRequest *request) {
+  return espalexa.handleAlexaApiCall(request);
 }
 
 void handleAlexa() {
-  fauxmo.handle();
+  espalexa.loop();
+}
+
+/**
+ * Notifiy Alexa the state has changed
+*/
+void updateAlexaDevice(String deviceName, bool state, byte brightness) {
+  if (!alexaInitialized) {
+    return;
+  }
+  Serial.printf(" set alexa device '%s' to state: %s brightness: %d\n", deviceName.c_str(), state ? "ON" : "OFF", brightness);
+  if (auto it = alexaDeviceMap.find(deviceName); it != alexaDeviceMap.end()) {
+    EspalexaDevice* dev = it->second;
+    dev->setState(state);
+    if (state) dev->setValue(brightness);
+  }
+}
+
+/**
+ * Alexa wants to change the state
+*/
+void updateAlexaDevice(String deviceName, bool state, byte brightness, byte r, byte g, byte b) {
+  if (!alexaInitialized) {
+    return;
+  }
+  Serial.printf(" set alexa device '%s' to state: %s brightness: %d, color: (%d,%d,%d)\n", deviceName.c_str(), state ? "ON" : "OFF", brightness, r, g, b);
+  // notifiy alexa the state has changed
+  if (auto it = alexaDeviceMap.find(deviceName); it != alexaDeviceMap.end()) {
+    EspalexaDevice* dev = it->second;
+    dev->setState(state);
+    if (state) {
+      dev->setValue(brightness);
+      dev->setColor(r, g, b);
+    }
+  }
+}
+
+void alexaStateChanged(EspalexaDevice* dev) {
+  if (dev == nullptr || alexaDeviceMap.count(dev->getName()) == 0) {
+    return;
+  }
+  Serial.printf("[From Alexa] Device #%d state: %s brightness: %d\n", dev->getId(), dev->getState() ? "ON" : "OFF", dev->getValue());
+  setPanelStatus(dev->getName(), dev->getState() ?  "on-solid" : "off", "", String(dev->getValue()), 0);
 }
