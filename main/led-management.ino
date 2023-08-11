@@ -1,21 +1,9 @@
 
 struct GpioState {
   PanelState state;
+  BlinkingType blinking;
   byte intensity;
   bool isPosAnode;
-
-  BlinkingType blinkingType() {
-    switch (this->state) {
-      case PANEL_BLINKING:
-        return BLINKING_NORMAL;
-      case PANEL_BLINKING_FAST:
-        return BLINKING_FAST;
-      case PANEL_BLINKING_SLOW:
-        return BLINKING_SLOW;
-      default:
-        return BLINKING_OFF;
-    }
-  }
 };
 
 // blinking intervals, coded as { <iterval on>, <interval off> } in milliseconds
@@ -40,15 +28,13 @@ BlinkingState blinkingStates[NumBlinkingTypes];
 ulong lastBlinkCheck;
 
 void setupGpio(const PanelSetupMap& setup);
-bool isOn(PanelState state);
-bool isOff(PanelState state);
-
 
 void setupGpio(const PanelSetupMap& setup) {
   // initialize default values
   for (int gpio=0; gpio < MAX_PINS; gpio++) {
     gpioStates[gpio].state = PANEL_DISABLED;
     gpioStates[gpio].intensity = 255;
+    gpioStates[gpio].blinking = BLINKING_OFF;
   }
 
   for (auto& item: setup) {
@@ -75,14 +61,6 @@ void setupGpio(const PanelSetupMap& setup) {
   lastBlinkCheck = now;
 }
 
-bool isOn(PanelState state) {
-  return state == PANEL_ON;
-}
-
-bool isOff(PanelState state) {
-  return state == PANEL_OFF || state == PANEL_DISABLED;
-}
-
 void turnLightOn(uint8_t gpio, byte intensity = 255) {
   bool isPWM = intensity > 0 && intensity < 255;
   bool isPosAnode = gpioStates[gpio].isPosAnode;
@@ -101,7 +79,7 @@ void turnLightOff(uint8_t gpio) {
   digitalWrite(gpio, isPosAnode ? LOW : HIGH);
 }
 
-void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
+void setLightState(uint8_t gpio, PanelState newState, BlinkingType newBlinking = BLINKING_OFF, byte newIntensity = 255) {
   Serial.print(" gpio " + String(gpio) + ": ");
   if (gpio >= MAX_PINS) {
     Serial.println("invalid gpio pin");
@@ -114,26 +92,22 @@ void setLightState(uint8_t gpio, PanelState newState, byte newIntensity = 255) {
   }
 
   GpioState& light = gpioStates[gpio];
-  if (light.state == newState && light.intensity == newIntensity) {
+  if (light.state == newState && light.intensity == newIntensity && light.blinking == newBlinking) {
     Serial.println("no change in state");
     return; // nothing is changing
   }
 
   light.state = newState;
   light.intensity = newIntensity; 
+  light.blinking = newBlinking;
 
-  if (isOff(newState) || newIntensity == 0) {
+  if (!isPanelOn(newState) || newIntensity == 0) {
     Serial.println("turn off");
     turnLightOff(gpio);
-  } else if (isOn(newState)) {
+  } else {
     // set light intensity
     Serial.println("turn on intensity " + String(newIntensity));
     turnLightOn(gpio, light.intensity);
-  } else {
-    // set blinking state
-    Serial.println("turn on blinking");
-    turnLightOn(gpio, light.intensity);
-    handleBlinking();
   }
 }
 
@@ -196,7 +170,7 @@ void handleBlinking() {
       blink.isLightOn = !blink.isLightOn;
       for (int gpio=0; gpio < MAX_PINS; gpio++) {
         GpioState& light = gpioStates[gpio];
-        if (light.blinkingType() != blinkType) {
+        if (!isPanelOn(light.state) || light.blinking != blinkType) {
           continue;
         }
         if (blink.isLightOn) {

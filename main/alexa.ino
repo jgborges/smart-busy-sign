@@ -21,7 +21,7 @@ void setupAlexaWebServer(AsyncWebServer* server) {
 }
 
 void setupAlexaDevices() {
-  Serial.println("Creating Alexa devices")
+  Serial.println("Creating Alexa devices");
   std::map<String, bool> deviceMap;
   getDeviceMap(deviceMap);
 
@@ -89,5 +89,14 @@ void alexaStateChanged(EspalexaDevice* dev) {
     return;
   }
   Serial.printf("[From Alexa] Device #%d state: %s brightness: %d\n", dev->getId(), dev->getState() ? "ON" : "OFF", dev->getValue());
-  setPanelStatus(dev->getName(), dev->getState() ?  "on-solid" : "off", "", String(dev->getValue()), 0);
+  String state = dev->getState() ? "on" : "off";
+  String color = dev->getType() == EspalexaDeviceType::color ? rgbToColor(dev->getR(), dev->getG(), dev->getB()) : "";
+  String intensity = String(dev->getValue());
+  setPanelStatus(dev->getName(), state, color, intensity, "", 0);
+}
+
+String rgbToColor(byte r, byte g, byte b) {
+  char macStr[8] = { 0 };
+  sprintf(macStr, "#%02X%02X%02X", r, g, b);
+  return String(macStr);
 }

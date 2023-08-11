@@ -235,7 +235,7 @@ const char *indexHtml = R"====(
       (data || []).panels.forEach(p => {
         const tr = document.createElement('tr');
         const bgcolor = p.state === 'off' ? 'LightGray' : colorMap[p.color] || p.color;
-        const blink = p.state.includes("blinking") ? p.state.replace("on-", "") : "";
+        const blink = p.state === 'on' && p.blinking ? p.blinking.replace('on','blinking') : '';
         const intensityPercentage = Math.round(p.intensity * 100.0 / 255.0) + '%';
         tr.innerHTML = `
           <td><img src="/resources/${p.name}.png" height="32" style="background-color:${bgcolor}" class="${blink}"/></td>

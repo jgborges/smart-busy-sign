@@ -105,7 +105,7 @@ void buildStatusMap(const PanelSetupMap& panelSetup) {
     if (isLedRGB(firstLed)) {
       color = "#FFFFFF"; // equivalent to white
     }
-    statusMap.insert(std::pair<String, PanelStatus>(name, { name, PANEL_OFF, color, 255 }));
+    statusMap.insert(std::pair<String, PanelStatus>(name, { name, PANEL_OFF, BLINKING_OFF, color, 255 }));
   }
 }
 
@@ -150,7 +150,7 @@ bool isLedRGB(LedTypes led) {
 }
 
 bool isPanelOn(PanelState state) {
-  return state != PANEL_DISABLED && state != PANEL_OFF;
+  return state == PANEL_ON;
 }
 
 void applySignStatus() {
@@ -161,11 +161,12 @@ void applySignStatus() {
 
 void applySignStatus(PanelStatus panel) {
   String name = panel.name;
-  String color = panel.color;
   PanelState state = panel.state;
+  BlinkingType blinking = panel.blinking;
+  String color = panel.color;
   byte intensity = panel.intensity;
 
-  Serial.println("Updating panel '" + name + "' to '" + panelStateToString(state) + "' state");
+  Serial.println("Set panel '" + name + "' state to '" + panelStateToString(panel.state) + "'");
   LedTypes firstLed = panelSetupMap.at(name).begin()->first;
   bool panelIsRGB = isLedRGB(firstLed);
   if (panelIsRGB) {
@@ -176,13 +177,13 @@ void applySignStatus(PanelStatus panel) {
     }
     Serial.println(" set color RGB (" + String(r) + "," + String(g) + "," + String(b) + ")");
     byte r_gpio = panelSetupMap.at(name).at(RGB_RED).gpio;
-    setLightState(r_gpio, state, r);
+    setLightState(r_gpio, state, blinking, r);
     byte g_gpio = panelSetupMap.at(name).at(RGB_GREEN).gpio;
-    setLightState(g_gpio, state, g);
+    setLightState(g_gpio, state, blinking, g);
     byte b_gpio = panelSetupMap.at(name).at(RGB_BLUE).gpio;
-    setLightState(b_gpio, state, b);
+    setLightState(b_gpio, state, blinking, b);
 
-    updateAlexaDevice(name, !isOff(state), intensity, (byte)r, (byte)g, (byte)b);
+    updateAlexaDevice(name, isPanelOn(state), intensity, (byte)r, (byte)g, (byte)b);
     return;
   }
 
@@ -200,12 +201,12 @@ void applySignStatus(PanelStatus panel) {
     LedTypes led = item.first;
     byte gpio = item.second.gpio;
     if (led == ledToSet) { 
-      setLightState(gpio, state, intensity);
+      setLightState(gpio, state, blinking, intensity);
     } else {
-      setLightState(gpio, PANEL_OFF, intensity);
+      setLightState(gpio, PANEL_OFF); // turn off any other color
     }
-    updateAlexaDevice(name, !isOff(state), intensity);
   }
+  updateAlexaDevice(name, isPanelOn(state), intensity);
 }
 
 String getSignStatus() {
@@ -222,6 +223,7 @@ String getSignStatus() {
     DynamicJsonDocument status(300);
     status["name"] = pstatus.name;
     status["state"] = panelStateToString(pstatus.state);
+    status["blinking"] = blinkingTypeToString(pstatus.blinking);
     status["color"] = pstatus.color;
     status["intensity"] = pstatus.intensity;
     status["ttl"] = pstatus.ttl;
@@ -264,20 +266,26 @@ ParsingResult setSignStatus(String statusJson) {
     String state = panel["state"];
     String color = panel["color"] | "";
     String intensity = panel["intensity"] | "";
+    String blinking = panel["blinking"] | "";
     ushort ttl = (ushort)String(panel["ttl"] | "0").toInt();
 
-    setPanelStatus(name, state, color, intensity, ttl);
+    setPanelStatus(name, state, color, intensity, blinking, ttl);
   }
   return PARSE_SUCCESS;
 }
 
-void setPanelStatus(String name, String state, String color, String intensity, ushort ttl) {
+void setPanelStatus(String name, String state, String color, String intensity, String blinking, ushort ttl) {
   for (auto& item: statusMap) {
     PanelStatus& panel = item.second;
     if (!name.equals(panel.name)) {
       continue;
     }
-    panel.state = parsePanelState(state);
+    if (!state.isEmpty()) {
+      panel.state = parsePanelState(state);
+    }
+    if (!blinking.isEmpty()) {
+      panel.blinking = parseBlinkingType(blinking);
+    }
     if (!color.isEmpty()) {
       panel.color = color;
     }
@@ -346,28 +354,42 @@ String panelStateToString(PanelState state) {
     case PANEL_OFF:
       return "off";
     case PANEL_ON:
-      return "on-solid";
-    case PANEL_BLINKING:
-      return "on-blinking";
-    case PANEL_BLINKING_FAST:
-      return "on-blinking-fast";
-    case PANEL_BLINKING_SLOW:
-      return "on-blinking-slow";
+      return "on";
   }
 }
 
 PanelState parsePanelState(String state) {
   if (state.equals("off")) {
     return PANEL_OFF;
-  } else if (state.equals("on-solid")) {
+  } else if (state.equals("on")) {
     return PANEL_ON;
-  } else if (state.equals("on-blinking")) {
-    return PANEL_BLINKING;
-  } else if (state.equals("on-blinking-fast")) {
-    return PANEL_BLINKING_FAST;
-  } else if (state.equals("on-blinking-slow")) {
-    return PANEL_BLINKING_SLOW;
   } else {
     return PANEL_DISABLED;
+  }
+}
+
+String blinkingTypeToString(BlinkingType blinking) {
+  switch (blinking) {
+    default:
+    case BLINKING_OFF:
+      return "off";
+    case BLINKING_NORMAL:
+      return "on";
+    case BLINKING_FAST:
+      return "on-fast";
+    case BLINKING_SLOW:
+      return "on-slow";
+  }
+}
+
+BlinkingType parseBlinkingType(String blinking) {
+  if (blinking.equals("on")) {
+    return BLINKING_NORMAL;
+  } else if (blinking.equals("on-fast")) {
+    return BLINKING_NORMAL;
+  } else if (blinking.equals("on-slow")) {
+    return BLINKING_NORMAL;
+  } else /*if (blinking.equals("off"))*/ {
+    return BLINKING_OFF;
   }
 }

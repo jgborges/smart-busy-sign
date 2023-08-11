@@ -8,7 +8,7 @@
 #include "storage.h"
 
 const short FW_MAJOR = 1;
-const short FW_MINOR = 1;
+const short FW_MINOR = 2;
 
 bool staConnectionFailed = false;
 

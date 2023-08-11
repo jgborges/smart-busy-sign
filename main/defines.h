@@ -69,10 +69,7 @@ typedef std::map<String, LedSetupMap> PanelSetupMap;
 enum PanelState {
   PANEL_DISABLED,
   PANEL_OFF,
-  PANEL_ON,
-  PANEL_BLINKING,
-  PANEL_BLINKING_FAST,
-  PANEL_BLINKING_SLOW
+  PANEL_ON
 };
 
 enum BlinkingType { BLINKING_NORMAL, BLINKING_FAST, BLINKING_SLOW, BLINKING_OFF };

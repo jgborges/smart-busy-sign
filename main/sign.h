@@ -6,6 +6,7 @@
 struct PanelStatus {
   String name;
   PanelState state;
+  BlinkingType blinking;
   String color;
   byte intensity;
   ushort ttl;
