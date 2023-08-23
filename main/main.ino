@@ -31,6 +31,14 @@ void setup() {
   Serial.print(F("Board version: "));
   Serial.println(BOARD_VERSION);
 
+  // check for factory reset
+  if (checkHardReset()) {
+    factoryReset(false);
+    reboot();
+    return;
+  }
+
+  // initialize
   setupSign();
   setupStorage();
   setupWifi();
@@ -44,6 +52,7 @@ void loop() {
   handleSleep();
   handleBlinking();
   handleTTL();
+  handleButton();
   handleAlexa();
   yield();
 }

@@ -140,6 +140,35 @@ void turnAllLightsOff() {
   }
 }
 
+void turnNextLightsOn() {
+  bool turnNextOn = !isAllLightsOff(); // if all is off, turn first light on
+  bool nextIsOn = false;
+  for (int gpio=0; gpio < MAX_PINS; gpio++) {
+    PanelState state = gpioStates[gpio].state;
+    if (state == PANEL_DISABLED) {
+      continue;
+    } else if (turnNextOn && !nextIsOn) {
+      turnLightOn(gpio);
+      turnNextOn = false;
+      nextIsOn = true;
+    } else if (state == PANEL_ON) {
+      if (!nextIsOn) {
+        turnNextOn = true;
+      }
+      turnLightOff(gpio);
+    }
+  }
+  bool shouldTurnFirstOn = turnNextOn && !nextIsOn; // most likely, last light was on, so turn the on the first
+  if (shouldTurnFirstOn) {
+    for (int gpio=0; gpio < MAX_PINS; gpio++) {
+      if (gpioStates[gpio].state != PANEL_DISABLED) {
+        turnLightOn(gpio);
+        break;
+      }
+    }
+  }
+}
+
 bool isAllLightsOff() {
   for (int gpio=0; gpio < MAX_PINS; gpio++) {
     if (gpioStates[gpio].state == PANEL_DISABLED) {

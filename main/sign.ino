@@ -48,15 +48,21 @@
 #define SIGN_MODEL "smart-busy-sign_V0"
 #define SIGN_VERSION "V0"
 
-#define RESET_GPIO D6
+#define RESET_GPIO D3
+#define RESET_GPIO_MODE INPUT_PULLUP
+#define RESET_GPIO_PULLUP true
+
+const int SHORT_PRESS_TIME = 500;
+const int LONG_PRESS_TIME = 1000;
+const int HARD_RESET_TIME = 10000;
 
 // initialize with default panel setup
 const PanelSetupMap panelSetupMap = {
   { "busy",           { {WHITE,    {D1,ANODE_CONTROL_LED}} }}, 
   //                    {RED,      {D3,CATHODE_CONTROL_LED}} }},
-  { "camera",         { {YELLOW,   {D2,CATHODE_CONTROL_LED}} }},
-  { "microphone",     { {YELLOW,   {D3,CATHODE_CONTROL_LED}} }},
-  { "do-not-disturb", { {RED,      {D5,CATHODE_CONTROL_LED}} }}
+  { "camera",         { {YELLOW,   {D2,ANODE_CONTROL_LED}} }},
+  { "microphone",     { {YELLOW,   {D5,ANODE_CONTROL_LED}} }},
+  { "do-not-disturb", { {RED,      {D6,ANODE_CONTROL_LED}} }}
   //{ "alert",        { {RGB_RED,  {D7,ANODE_CONTROL_LED}}, 
   //                    {RGB_GREEN,{D8,ANODE_CONTROL_LED}},
   //                    {RGB_BLUE, {D9,ANODE_CONTROL_LED}} }}
@@ -73,6 +79,9 @@ void setupSign() {
   buildStatusMap(panelSetupMap);
   // appy default sign status
   applySignStatus(); // turn all off as gpios are initiated in DISABLED state
+
+  // setup button interface
+  pinMode(RESET_GPIO, RESET_GPIO_MODE);
 
   lastTTLCheck = millis();
 }
@@ -116,6 +125,36 @@ void getDeviceMap(std::map<String, bool>& deviceMap) {
     LedTypes firstLed = item.second.begin()->first;
     deviceMap.insert({ name, isLedRGB(firstLed) });
   }
+}
+
+void handleButton() {
+  ulong pressPeriod;
+  checkButtonPressed(LONG_PRESS_TIME, pressPeriod);
+  
+  if (pressPeriod >= LONG_PRESS_TIME) {
+    turnAllLightsOff();
+  } else if (pressPeriod >= SHORT_PRESS_TIME) {
+    turnNextLightsOn();
+  }
+}
+
+bool checkHardReset() {
+  ulong elapsed;
+  return checkButtonPressed(HARD_RESET_TIME, elapsed);
+}
+
+bool checkButtonPressed(int timeout, ulong& elapsed) {
+  const int reference = RESET_GPIO_PULLUP ? LOW : HIGH;
+  ulong start = millis();
+  elapsed = 0;
+  while (digitalRead(RESET_GPIO) == reference) {
+    elapsed = millis() - start;
+    if (elapsed >= timeout) {
+      return true;
+    }
+    delay(100);
+  }
+  return false;
 }
 
 void handleTTL() {
@@ -259,7 +298,7 @@ ParsingResult setSignStatus(String statusJson) {
       return JSON_MISSING_NAME_FIELD;
     }
     if (!panel.containsKey("state")) {
-      Serial.println("missing 'color' or 'state' field");
+      Serial.println("missing 'state' field");
       return JSON_MISSING_STATE_FIELD;
     }
     String name = panel["name"];
@@ -386,9 +425,9 @@ BlinkingType parseBlinkingType(String blinking) {
   if (blinking.equals("on")) {
     return BLINKING_NORMAL;
   } else if (blinking.equals("on-fast")) {
-    return BLINKING_NORMAL;
+    return BLINKING_FAST;
   } else if (blinking.equals("on-slow")) {
-    return BLINKING_NORMAL;
+    return BLINKING_SLOW;
   } else /*if (blinking.equals("off"))*/ {
     return BLINKING_OFF;
   }

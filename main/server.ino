@@ -2,9 +2,7 @@
 #include "resources/images.h"
 #include <ESPAsyncWebSrv.h>
 
-const unsigned int port = 80;
-
-AsyncWebServer webServer(port);
+AsyncWebServer webServer(80);
 
 class OneParamRewrite : public AsyncWebRewrite
 {
@@ -84,14 +82,14 @@ void setupWebServer() {
   webServer.onNotFound(handleNotFound);
   webServer.onRequestBody(handleRequestBody);   
   
-  webServer.begin();
+  //webServer.begin();
   Serial.println("HTTP web server started");
 
-  setupAlexaWebServer(&webServer);
+  setupAlexaWebServer(&webServer); // will execute webServer.begin()
 }
 
 void handleRequestBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-  if (total > 0 && request->_tempObject == NULL && total < 4*1024) { // you may use your own size instead of 10240
+  if (total > 0 && request->_tempObject == NULL && total < 10*1024) { // you may use your own size instead of 10240
     request->_tempObject = malloc(total+1);
     ((uint8_t*)request->_tempObject)[total] = 0;
   }

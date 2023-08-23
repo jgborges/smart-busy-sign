@@ -13,6 +13,7 @@ struct PanelStatus {
 };
 
 void buildStatusMap(const PanelSetupMap& panelSetup);
+void handleButton();
 void applySignStatus();
 void applySignStatus(PanelStatus panel);
 String getSignStatus();
