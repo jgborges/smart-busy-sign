@@ -52,9 +52,9 @@
 #define RESET_GPIO_MODE INPUT_PULLUP
 #define RESET_GPIO_PULLUP true
 
-const int SHORT_PRESS_TIME = 500;
-const int LONG_PRESS_TIME = 1000;
-const int HARD_RESET_TIME = 10000;
+const uint SHORT_PRESS_TIME = 300;
+const uint LONG_PRESS_TIME = 1500;
+const uint HARD_RESET_TIME = 10000;
 
 // initialize with default panel setup
 const PanelSetupMap panelSetupMap = {
@@ -128,33 +128,38 @@ void getDeviceMap(std::map<String, bool>& deviceMap) {
 }
 
 void handleButton() {
-  ulong pressPeriod;
-  checkButtonPressed(LONG_PRESS_TIME, pressPeriod);
-  
+  ulong pressPeriod = checkButtonPressed(LONG_PRESS_TIME+100);
   if (pressPeriod >= LONG_PRESS_TIME) {
-    turnAllLightsOff();
+    Serial.println("Long press. Turning all panels off...");
+    turnAllPanelsOff();
+    delay(300);
   } else if (pressPeriod >= SHORT_PRESS_TIME) {
-    turnNextLightsOn();
+    Serial.println("Short press. Turning next panel on...");
+    turnNextPanelOn();
+    delay(300);
   }
 }
 
 bool checkHardReset() {
-  ulong elapsed;
-  return checkButtonPressed(HARD_RESET_TIME, elapsed);
+  ulong pressPeriod = checkButtonPressed(HARD_RESET_TIME);
+  return pressPeriod >= HARD_RESET_TIME;
 }
 
-bool checkButtonPressed(int timeout, ulong& elapsed) {
+ulong checkButtonPressed(int timeout) {
   const int reference = RESET_GPIO_PULLUP ? LOW : HIGH;
   ulong start = millis();
-  elapsed = 0;
+  ulong elapsed = 0;
   while (digitalRead(RESET_GPIO) == reference) {
     elapsed = millis() - start;
     if (elapsed >= timeout) {
-      return true;
+      break;
     }
     delay(100);
   }
-  return false;
+  if (elapsed > 0) {
+    Serial.println("Button pressed for " + String(elapsed) + " ms");
+  }
+  return elapsed;
 }
 
 void handleTTL() {
@@ -190,6 +195,73 @@ bool isLedRGB(LedTypes led) {
 
 bool isPanelOn(PanelState state) {
   return state == PANEL_ON;
+}
+
+void turnPanelOn(PanelStatus& panel) {
+  if (panel.state == PANEL_ON) {
+    return;
+  }
+  panel.state = PANEL_ON;
+  panel.ttl = getAutoTurnOffPeriod();
+  applySignStatus(panel);
+}
+
+void turnAllPanelsOff() {
+  for (auto& item: statusMap) {
+    turnPanelOff(item.second);
+  }
+}
+
+void turnPanelOff(PanelStatus& panel) {
+  if (panel.state == PANEL_OFF) {
+    return;
+  }
+  panel.state = PANEL_OFF;
+  panel.ttl = 0;
+  applySignStatus(panel);
+}
+
+void turnNextPanelOn() {
+  bool turnNextOn = isAllPanelsOff(); // if all is off, turn first panel on
+  bool nextIsOn = false;
+  for (auto& item: statusMap) {
+    PanelStatus& panel = item.second;
+    if (panel.state == PANEL_DISABLED) {
+      continue;
+    } else if (turnNextOn && !nextIsOn) {
+      turnPanelOn(panel);
+      turnNextOn = false;
+      nextIsOn = true;
+    } else if (panel.state == PANEL_ON) {
+      if (!nextIsOn) {
+        turnNextOn = true;
+      }
+      turnPanelOff(panel);
+    }
+  }
+
+  bool shouldTurnFirstOn = turnNextOn && !nextIsOn; // if no panel was on or if last panel was on, so turn the on the first
+  if (shouldTurnFirstOn) {
+    for (auto& item: statusMap) {
+      PanelStatus& panel = item.second;
+      if (panel.state != PANEL_DISABLED) {
+        turnPanelOff(panel);
+        break;
+      }
+    }
+  }
+}
+
+bool isAllPanelsOff() {
+  for (auto& item: statusMap) {
+    PanelStatus panel = item.second;
+    if (panel.state == PANEL_DISABLED) {
+      continue;
+    } else if (panel.state != PANEL_OFF) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void applySignStatus() {
